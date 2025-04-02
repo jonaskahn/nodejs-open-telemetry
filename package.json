@@ -1,0 +1,25 @@
+{
+  "name": "service-cronjob-demo",
+  "version": "1.0.0",
+  "description": "Project with 5 services and 2 cronjobs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:telemetry": "node src/run-telemetry-test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-cron": "^3.0.2",
+    "moment": "^2.29.4",
+    "uuid": "^9.0.0",
+    "@opentelemetry/api": "^1.4.1",
+    "@opentelemetry/sdk-node": "^0.41.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.37.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.41.0",
+    "@opentelemetry/semantic-conventions": "^1.15.0",
+    "@opentelemetry/resources": "^1.15.0"
+  }
+}
