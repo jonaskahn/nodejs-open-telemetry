@@ -20,9 +20,6 @@ function _prepareNotificationContent(userId, message, channel) {
     setTimeout(async () => {
       loggingService.logInfo(`Preparing notification content for user ${userId}`);
 
-      // Get user channels to customize the message
-      const userChannel = userChannels[userId] || {};
-
       // Level 2 - Get user preferences to customize notification
       const preferences = await _getUserNotificationPreferences(userId);
 

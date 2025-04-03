@@ -8,6 +8,9 @@ const notificationService = require('../services/notificationService');
 const telemetry = require('../middleware/telemetry');
 const { SpanStatusCode } = require('@opentelemetry/api');
 
+// Base tracer only used for initialization
+const baseTracer = telemetry.getTracer('reportGenerationJob');
+
 /**
  * Job configuration
  */
@@ -48,21 +51,32 @@ function _validateJobConfig() {
  * Level 2 of nested calls
  */
 function _setupCronSchedule(config) {
-  return new Promise(async resolve => {
+  return new Promise(resolve => {
     // Simulate cron setup delay
     const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
-    setTimeout(async () => {
+
+    setTimeout(() => {
       loggingService.logInfo(`Setting up cron schedule: ${config.schedule}`);
 
-      // Level 3 - Register job handlers
-      const handlersResult = await _registerJobHandlers();
-
-      resolve({
-        schedule: config.schedule,
-        registered: true,
-        handlers: handlersResult.handlers,
-        timestamp: new Date(),
-      });
+      // We need to use Promise chaining instead of async/await in the executor
+      _registerJobHandlers()
+        .then(handlersResult => {
+          resolve({
+            schedule: config.schedule,
+            registered: true,
+            handlers: handlersResult.handlers,
+            timestamp: new Date(),
+          });
+        })
+        .catch(error => {
+          loggingService.logError(`Error setting up cron schedule: ${error.message}`);
+          resolve({
+            schedule: config.schedule,
+            registered: false,
+            handlers: [],
+            timestamp: new Date(),
+          });
+        });
     }, delay);
   });
 }
@@ -72,20 +86,30 @@ function _setupCronSchedule(config) {
  * Level 3 of nested calls
  */
 function _registerJobHandlers() {
-  return new Promise(async resolve => {
+  return new Promise(resolve => {
     // Simulate handler registration delay
     const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
-    setTimeout(async () => {
+
+    setTimeout(() => {
       loggingService.logInfo('Registering job execution handlers');
 
-      // Level 4 - Setup notification channels
-      const notificationSetup = await _setupNotificationChannels();
-
-      resolve({
-        handlers: ['onSuccess', 'onFailure', 'onCompletion'],
-        notificationChannels: notificationSetup.channels,
-        timestamp: new Date(),
-      });
+      // We need to use Promise chaining instead of async/await in the executor
+      _setupNotificationChannels()
+        .then(notificationSetup => {
+          resolve({
+            handlers: ['onSuccess', 'onFailure', 'onCompletion'],
+            notificationChannels: notificationSetup.channels,
+            timestamp: new Date(),
+          });
+        })
+        .catch(error => {
+          loggingService.logError(`Error registering job handlers: ${error.message}`);
+          resolve({
+            handlers: ['onSuccess', 'onFailure'],
+            notificationChannels: [],
+            timestamp: new Date(),
+          });
+        });
     }, delay);
   });
 }
@@ -95,20 +119,30 @@ function _registerJobHandlers() {
  * Level 4 of nested calls
  */
 function _setupNotificationChannels() {
-  return new Promise(async resolve => {
+  return new Promise(resolve => {
     // Simulate notification setup delay
     const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
-    setTimeout(async () => {
+
+    setTimeout(() => {
       loggingService.logInfo('Setting up notification channels for job results');
 
-      // Level 5 - Setup persistence layer
-      const persistenceSetup = await _setupPersistenceLayer();
-
-      resolve({
-        channels: ['email', 'console', 'dashboard'],
-        persistence: persistenceSetup.enabled,
-        timestamp: new Date(),
-      });
+      // We need to use Promise chaining instead of async/await in the executor
+      _setupPersistenceLayer()
+        .then(persistenceSetup => {
+          resolve({
+            channels: ['email', 'console', 'dashboard'],
+            persistence: persistenceSetup.enabled,
+            timestamp: new Date(),
+          });
+        })
+        .catch(error => {
+          loggingService.logError(`Error setting up notification channels: ${error.message}`);
+          resolve({
+            channels: ['console'],
+            persistence: false,
+            timestamp: new Date(),
+          });
+        });
     }, delay);
   });
 }
@@ -137,9 +171,7 @@ function _setupPersistenceLayer() {
  * Generate a usage report
  */
 function _generateUsageReport(executionId) {
-  // Create a dedicated tracer for this execution
-  const executionTracer = telemetry.getTracer(`reportGenerationJob.${executionId}`);
-
+  telemetry.getTracer(`reportGenerationJob.${executionId}`);
   try {
     loggingService.logInfo(`Starting scheduled report generation [execution: ${executionId}]...`);
 
@@ -201,9 +233,7 @@ function _generateUsageReport(executionId) {
   } catch (error) {
     loggingService.logError(
       `Report generation failed [execution: ${executionId}]: ${error.message}`,
-      {
-        error,
-      },
+      { error },
     );
 
     // Notify admin about failure

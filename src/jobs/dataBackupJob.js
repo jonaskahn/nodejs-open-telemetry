@@ -1,5 +1,4 @@
 const cron = require('node-cron');
-const moment = require('moment');
 const { v4: uuidv4 } = require('uuid');
 const dataService = require('../services/dataService');
 const loggingService = require('../services/loggingService');
@@ -53,7 +52,7 @@ function _performBackup(executionId) {
     };
   } catch (error) {
     loggingService.logError(`Backup failed [execution: ${executionId}]: ${error.message}`, {
-      error,
+      error
     });
 
     notificationService.sendNotification(
@@ -72,14 +71,17 @@ function _performBackup(executionId) {
 }
 
 // Wrap the original function with OpenTelemetry tracing
-// Note: The tracer will be created in the wrapped function for each execution
 const performBackup = executionId => {
   const execId = executionId || uuidv4();
-  return telemetry.wrapWithSpan(() => _performBackup(execId), `performBackup.${execId}`, {
-    'backup.type': 'scheduled',
-    'backup.job': 'dataBackupJob',
-    'backup.execution_id': execId,
-  })();
+  return telemetry.wrapWithSpan(
+    () => _performBackup(execId),
+    `performBackup.${execId}`,
+    {
+      'backup.type': 'scheduled',
+      'backup.job': 'dataBackupJob',
+      'backup.execution_id': execId
+    }
+  )();
 };
 
 /**
@@ -135,7 +137,7 @@ function _initBackupJob() {
 // Wrap the initialization function with OpenTelemetry tracing
 const initBackupJob = telemetry.wrapWithSpan(_initBackupJob, 'initBackupJob', {
   'job.name': 'dataBackupJob',
-  'job.type': 'cron',
+  'job.type': 'cron'
 });
 
 module.exports = {
