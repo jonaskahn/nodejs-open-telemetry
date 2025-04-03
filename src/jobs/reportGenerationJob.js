@@ -8,9 +8,6 @@ const notificationService = require('../services/notificationService');
 const telemetry = require('../middleware/telemetry');
 const { SpanStatusCode } = require('@opentelemetry/api');
 
-// Base tracer only used for initialization
-const baseTracer = telemetry.getTracer('reportGenerationJob');
-
 /**
  * Job configuration
  */
@@ -19,6 +16,122 @@ const CONFIG = {
   enabled: true,
   adminUser: 'admin',
 };
+
+/**
+ * Validate job configuration
+ * Level 1 of nested calls
+ */
+function _validateJobConfig() {
+  return new Promise(resolve => {
+    // Simulate configuration validation delay
+    const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
+    setTimeout(() => {
+      loggingService.logInfo(`Validating job configuration for reportGenerationJob`);
+
+      const isValid = CONFIG.enabled && CONFIG.schedule && CONFIG.adminUser;
+
+      if (!isValid) {
+        loggingService.logWarning('Report generation job configuration is invalid');
+      }
+
+      resolve({
+        valid: isValid,
+        configErrors: isValid ? [] : ['Missing required configuration parameters'],
+        timestamp: new Date(),
+      });
+    }, delay);
+  });
+}
+
+/**
+ * Setup cron schedule
+ * Level 2 of nested calls
+ */
+function _setupCronSchedule(config) {
+  return new Promise(async resolve => {
+    // Simulate cron setup delay
+    const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
+    setTimeout(async () => {
+      loggingService.logInfo(`Setting up cron schedule: ${config.schedule}`);
+
+      // Level 3 - Register job handlers
+      const handlersResult = await _registerJobHandlers();
+
+      resolve({
+        schedule: config.schedule,
+        registered: true,
+        handlers: handlersResult.handlers,
+        timestamp: new Date(),
+      });
+    }, delay);
+  });
+}
+
+/**
+ * Register job handlers
+ * Level 3 of nested calls
+ */
+function _registerJobHandlers() {
+  return new Promise(async resolve => {
+    // Simulate handler registration delay
+    const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
+    setTimeout(async () => {
+      loggingService.logInfo('Registering job execution handlers');
+
+      // Level 4 - Setup notification channels
+      const notificationSetup = await _setupNotificationChannels();
+
+      resolve({
+        handlers: ['onSuccess', 'onFailure', 'onCompletion'],
+        notificationChannels: notificationSetup.channels,
+        timestamp: new Date(),
+      });
+    }, delay);
+  });
+}
+
+/**
+ * Setup notification channels for the job
+ * Level 4 of nested calls
+ */
+function _setupNotificationChannels() {
+  return new Promise(async resolve => {
+    // Simulate notification setup delay
+    const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
+    setTimeout(async () => {
+      loggingService.logInfo('Setting up notification channels for job results');
+
+      // Level 5 - Setup persistence layer
+      const persistenceSetup = await _setupPersistenceLayer();
+
+      resolve({
+        channels: ['email', 'console', 'dashboard'],
+        persistence: persistenceSetup.enabled,
+        timestamp: new Date(),
+      });
+    }, delay);
+  });
+}
+
+/**
+ * Setup persistence layer for job results
+ * Level 5 of nested calls
+ */
+function _setupPersistenceLayer() {
+  return new Promise(resolve => {
+    // Simulate persistence setup delay
+    const delay = Math.floor(Math.random() * (1000 - 500 + 1)) + 500;
+    setTimeout(() => {
+      loggingService.logInfo('Setting up persistence layer for job results');
+
+      resolve({
+        enabled: true,
+        storage: 'in-memory',
+        timestamp: new Date(),
+      });
+    }, delay);
+  });
+}
 
 /**
  * Generate a usage report
@@ -44,7 +157,7 @@ function _generateUsageReport(executionId) {
       data: {
         userCount: users.length,
         activeUsers: users.filter(
-          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days'))
+          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days')),
         ).length,
         dataSummary: {},
       },
@@ -68,13 +181,13 @@ function _generateUsageReport(executionId) {
     const duration = (endTime - startTime) / 1000;
 
     loggingService.logInfo(
-      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`
+      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`,
     );
 
     // Notify admin about report
     notificationService.sendNotification(
       CONFIG.adminUser,
-      `Weekly usage report generated. Report ID: ${report.id}`
+      `Weekly usage report generated. Report ID: ${report.id}`,
     );
 
     return {
@@ -90,14 +203,14 @@ function _generateUsageReport(executionId) {
       `Report generation failed [execution: ${executionId}]: ${error.message}`,
       {
         error,
-      }
+      },
     );
 
     // Notify admin about failure
     notificationService.sendNotification(
       CONFIG.adminUser,
       `Report generation failed: ${error.message}`,
-      'email'
+      'email',
     );
 
     return {
@@ -120,59 +233,110 @@ const generateUsageReport = executionId => {
       'report.type': 'usage',
       'report.job': 'reportGenerationJob',
       'report.execution_id': execId,
-    }
+    },
   )();
 };
 
 /**
  * Initialize and schedule the report generation job
  */
-function _initReportJob() {
-  if (!CONFIG.enabled) {
-    loggingService.logInfo('Report generation job is disabled');
+async function _initReportJob() {
+  try {
+    // Level 1 - Validate job configuration
+    const configValidation = await validateJobConfig();
+
+    if (!configValidation.valid) {
+      loggingService.logError('Cannot initialize job with invalid configuration');
+      return false;
+    }
+
+    loggingService.logInfo(`Job configuration validated successfully`);
+
+    // Level 2 - Setup cron schedule
+    const cronSetup = await setupCronSchedule(CONFIG);
+
+    loggingService.logInfo(
+      `Cron schedule setup completed with ${cronSetup.handlers.length} handlers`,
+    );
+
+    // Schedule the cron job
+    const job = cron.schedule(CONFIG.schedule, () => {
+      // Generate a unique ID for this execution
+      const executionId = uuidv4();
+
+      // Get a dedicated tracer for this job execution
+      const executionTracer = telemetry.getTracer(`reportGenerationJob.${executionId}`);
+
+      // Create a new traced span for each job execution with a standard name
+      executionTracer.startActiveSpan('reportJob.execution', span => {
+        try {
+          span.setAttribute('report.scheduled_time', new Date().toISOString());
+          span.setAttribute('report.cron_pattern', CONFIG.schedule);
+          span.setAttribute('report.execution_id', executionId);
+          span.setAttribute(
+            'report.notification_channels',
+            cronSetup.notificationChannels.join(','),
+          );
+
+          const result = generateUsageReport(executionId);
+
+          span.setAttribute('report.success', result.success);
+          if (result.reportId) {
+            span.setAttribute('report.id', result.reportId);
+          }
+          if (result.duration) {
+            span.setAttribute('report.duration_seconds', result.duration);
+          }
+
+          span.end();
+          return result;
+        } catch (error) {
+          span.recordException(error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          span.end();
+          throw error;
+        }
+      });
+    });
+
+    loggingService.logInfo(`Job successfully scheduled with pattern: ${CONFIG.schedule}`);
+    return job;
+  } catch (error) {
+    loggingService.logError(`Failed to initialize report job: ${error.message}`, { error });
     return false;
   }
-
-  loggingService.logInfo(`Scheduling report generation job with schedule: ${CONFIG.schedule}`);
-
-  // Schedule the cron job
-  const job = cron.schedule(CONFIG.schedule, () => {
-    // Generate a unique ID for this execution
-    const executionId = uuidv4();
-
-    // Get a dedicated tracer for this job execution
-    const executionTracer = telemetry.getTracer(`reportGenerationJob.${executionId}`);
-
-    // Create a new traced span for each job execution with a standard name
-    executionTracer.startActiveSpan('reportJob.execution', span => {
-      try {
-        span.setAttribute('report.scheduled_time', new Date().toISOString());
-        span.setAttribute('report.cron_pattern', CONFIG.schedule);
-        span.setAttribute('report.execution_id', executionId);
-
-        const result = generateUsageReport(executionId);
-
-        span.setAttribute('report.success', result.success);
-        if (result.reportId) {
-          span.setAttribute('report.id', result.reportId);
-        }
-        if (result.duration) {
-          span.setAttribute('report.duration_seconds', result.duration);
-        }
-
-        span.end();
-        return result;
-      } catch (error) {
-        span.recordException(error);
-        span.setStatus({ code: SpanStatusCode.ERROR });
-        span.end();
-        throw error;
-      }
-    });
-  });
-
-  return job;
 }
+
+// Wrap functions with OpenTelemetry tracing
+const validateJobConfig = telemetry.wrapWithSpan(
+  _validateJobConfig,
+  'reportGenerationJob.validateJobConfig',
+  { 'job.operation': 'validateConfig' },
+);
+
+const setupCronSchedule = telemetry.wrapWithSpan(
+  _setupCronSchedule,
+  'reportGenerationJob.setupCronSchedule',
+  { 'job.operation': 'setupSchedule' },
+);
+
+const registerJobHandlers = telemetry.wrapWithSpan(
+  _registerJobHandlers,
+  'reportGenerationJob.registerJobHandlers',
+  { 'job.operation': 'registerHandlers' },
+);
+
+const setupNotificationChannels = telemetry.wrapWithSpan(
+  _setupNotificationChannels,
+  'reportGenerationJob.setupNotificationChannels',
+  { 'job.operation': 'setupNotifications' },
+);
+
+const setupPersistenceLayer = telemetry.wrapWithSpan(
+  _setupPersistenceLayer,
+  'reportGenerationJob.setupPersistenceLayer',
+  { 'job.operation': 'setupPersistence' },
+);
 
 // Wrap the initialization function with OpenTelemetry tracing
 const initReportJob = telemetry.wrapWithSpan(_initReportJob, 'initReportJob', {

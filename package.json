@@ -7,6 +7,8 @@
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:telemetry": "node tests/run-telemetry-test.js",
+    "test:notification-chain": "node tests/test-notification-chain.js",
+    "test:report-job": "node tests/test-report-job-init.js",
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "format": "prettier --write \"**/*.{js,json,md}\""
