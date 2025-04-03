@@ -12,13 +12,8 @@ const reportGenerationJob = require('./jobs/reportGenerationJob');
  */
 function init() {
   loggingService.logInfo('Starting application...');
-
-  // Initialize cronjobs
   initJobs();
-
-  // Create test data for demo purposes
   createTestData();
-
   loggingService.logInfo('Application initialized successfully');
 }
 
