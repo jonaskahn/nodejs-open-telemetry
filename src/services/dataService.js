@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const loggingService = require('./loggingService');
 const notificationService = require('./notificationService');
+const telemetry = require('../middleware/telemetry');
 
 // Mock data storage
 const dataStore = {};
@@ -8,7 +9,7 @@ const dataStore = {};
 /**
  * Store a data item
  */
-function storeData(data, userId) {
+function _storeData(data, userId) {
   const dataId = uuidv4();
   const timestamp = new Date();
 
@@ -27,7 +28,7 @@ function storeData(data, userId) {
 /**
  * Retrieve data by ID
  */
-function getDataById(dataId) {
+function _getDataById(dataId) {
   if (!dataStore[dataId]) {
     loggingService.logError(`Data not found: ${dataId}`);
     return null;
@@ -39,7 +40,7 @@ function getDataById(dataId) {
 /**
  * Update existing data
  */
-function updateData(dataId, newData) {
+function _updateData(dataId, newData) {
   if (!dataStore[dataId]) {
     loggingService.logError(`Cannot update, data not found: ${dataId}`);
     return null;
@@ -51,7 +52,7 @@ function updateData(dataId, newData) {
     updatedAt: new Date(),
   };
 
-  // Notify about data update
+  // Notify about data update - using useParentSpan=true to maintain the same span
   notificationService.sendNotification(
     dataStore[dataId].userId,
     `Your data ${dataId} was updated successfully`
@@ -64,14 +65,14 @@ function updateData(dataId, newData) {
 /**
  * Get all data for a specific user
  */
-function getUserData(userId) {
+function _getUserData(userId) {
   return Object.values(dataStore).filter(item => item.userId === userId);
 }
 
 /**
  * Create backup of all data
  */
-function createDataBackup() {
+function _createDataBackup() {
   const backupId = uuidv4();
   const backup = {
     id: backupId,
@@ -82,6 +83,23 @@ function createDataBackup() {
   loggingService.logInfo(`Data backup created: ${backupId}`);
   return backup;
 }
+
+// Wrap all functions with OpenTelemetry tracing
+const storeData = telemetry.wrapWithSpan(_storeData, 'dataService.storeData', {
+  'data.operation': 'store',
+});
+const getDataById = telemetry.wrapWithSpan(_getDataById, 'dataService.getDataById', {
+  'data.operation': 'retrieve',
+});
+const updateData = telemetry.wrapWithSpan(_updateData, 'dataService.updateData', {
+  'data.operation': 'update',
+});
+const getUserData = telemetry.wrapWithSpan(_getUserData, 'dataService.getUserData', {
+  'data.operation': 'list',
+});
+const createDataBackup = telemetry.wrapWithSpan(_createDataBackup, 'dataService.createDataBackup', {
+  'data.operation': 'backup',
+});
 
 module.exports = {
   storeData,

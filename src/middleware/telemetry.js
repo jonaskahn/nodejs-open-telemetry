@@ -99,15 +99,16 @@ class Telemetry {
    * @param {Function} fn - Function to wrap
    * @param {string} name - Span name
    * @param {Object} attributes - Span attributes
+   * @param {boolean} useParentSpan - If true, uses parent span instead of creating a child
    * @returns {Function} - Wrapped function
    */
-  wrapWithSpan(fn, name, attributes = {}) {
+  wrapWithSpan(fn, name, attributes = {}, useParentSpan = false) {
     return (...args) => {
       const currentSpan = trace.getActiveSpan();
 
-      // If no active span, create a new one
-      if (!currentSpan) {
-        const tracer = this.getTracer('default');
+      // If no active span or not using parent span, create a new span
+      if (!currentSpan || !useParentSpan) {
+        const tracer = this.getTracer(name.split('.')[0] || 'default');
         return tracer.startActiveSpan(name, { attributes }, span => {
           try {
             const result = fn(...args);
@@ -138,35 +139,41 @@ class Telemetry {
         });
       }
 
-      // If there's an active span, add a child span
-      return trace.getTracer('default').startActiveSpan(name, { attributes }, span => {
-        try {
-          const result = fn(...args);
-
-          // Handle promises
-          if (result && typeof result.then === 'function') {
-            return result
-              .then(value => {
-                span.end();
-                return value;
-              })
-              .catch(error => {
-                span.setStatus({ code: SpanStatusCode.ERROR });
-                span.recordException(error);
-                span.end();
-                throw error;
-              });
-          }
-
-          span.end();
-          return result;
-        } catch (error) {
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          span.recordException(error);
-          span.end();
-          throw error;
+      // If there's an active span and useParentSpan is true, use it directly
+      try {
+        // Add attributes to existing span if provided
+        if (attributes && Object.keys(attributes).length > 0) {
+          Object.entries(attributes).forEach(([key, value]) => {
+            currentSpan.setAttribute(key, value);
+          });
         }
-      });
+
+        // Add event for function call
+        currentSpan.addEvent(`Executing ${name}`);
+
+        const result = fn(...args);
+
+        // Handle promises
+        if (result && typeof result.then === 'function') {
+          return result
+            .then(value => {
+              currentSpan.addEvent(`Completed ${name}`);
+              return value;
+            })
+            .catch(error => {
+              currentSpan.addEvent(`Failed ${name}: ${error.message}`);
+              currentSpan.recordException(error);
+              throw error;
+            });
+        }
+
+        currentSpan.addEvent(`Completed ${name}`);
+        return result;
+      } catch (error) {
+        currentSpan.addEvent(`Failed ${name}: ${error.message}`);
+        currentSpan.recordException(error);
+        throw error;
+      }
     };
   }
 }
@@ -175,7 +182,7 @@ class Telemetry {
 const telemetry = new Telemetry();
 
 // Initialize telemetry synchronously before export
-(async function() {
+(async function () {
   try {
     await telemetry.init();
   } catch (err) {

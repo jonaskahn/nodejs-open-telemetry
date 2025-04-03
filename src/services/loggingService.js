@@ -1,3 +1,5 @@
+const telemetry = require('../middleware/telemetry');
+const { trace } = require('@opentelemetry/api');
 const moment = require('moment');
 
 // In-memory log storage for demo purposes
@@ -8,94 +10,157 @@ const MAX_LOGS = 1000;
  * Log levels
  */
 const LOG_LEVELS = {
-  INFO: 'INFO',
-  WARNING: 'WARNING',
   ERROR: 'ERROR',
+  WARN: 'WARN',
+  INFO: 'INFO',
   DEBUG: 'DEBUG',
 };
 
 /**
- * Core logging function
+ * Internal logging function
+ * @private
  */
-function log(level, message, metadata = {}) {
-  const timestamp = moment().format('YYYY-MM-DD HH:mm:ss.SSS');
-  const logEntry = {
-    timestamp,
+function _log(level, message, metadata = {}) {
+  const timestamp = new Date();
+  const log = {
     level,
     message,
+    timestamp,
     metadata,
   };
 
-  // Store log
-  logs.push(logEntry);
+  // Store log in memory
+  logs.push(log);
 
-  // For demo purposes, keep only the last MAX_LOGS
-  if (logs.length > MAX_LOGS) {
-    logs.shift();
+  // Get current active span if available
+  const currentSpan = trace.getActiveSpan();
+  if (currentSpan) {
+    // Add log as event to the current span
+    currentSpan.addEvent('log', {
+      'log.level': level,
+      'log.message': message,
+      'log.timestamp': timestamp.toISOString(),
+      ...metadata,
+    });
   }
 
-  // In a real system, this might write to a file or external logging service
-  console.log(`[${timestamp}] [${level}] ${message}`);
+  // Format the log for console output
+  console.log(
+    `[${timestamp.toISOString()}] [${level}] ${message}`,
+    Object.keys(metadata).length ? metadata : ''
+  );
 
-  return logEntry;
+  return log;
 }
 
 /**
- * Log info level message
+ * Log error message
  */
-function logInfo(message, metadata = {}) {
-  return log(LOG_LEVELS.INFO, message, metadata);
+function _logError(message, metadata = {}) {
+  return _log(LOG_LEVELS.ERROR, message, metadata);
 }
 
 /**
- * Log warning level message
+ * Log warning message
  */
-function logWarning(message, metadata = {}) {
-  return log(LOG_LEVELS.WARNING, message, metadata);
+function _logWarning(message, metadata = {}) {
+  return _log(LOG_LEVELS.WARN, message, metadata);
 }
 
 /**
- * Log error level message
+ * Log info message
  */
-function logError(message, metadata = {}) {
-  return log(LOG_LEVELS.ERROR, message, metadata);
+function _logInfo(message, metadata = {}) {
+  return _log(LOG_LEVELS.INFO, message, metadata);
 }
 
 /**
- * Log debug level message
+ * Log debug message
  */
-function logDebug(message, metadata = {}) {
-  return log(LOG_LEVELS.DEBUG, message, metadata);
+function _logDebug(message, metadata = {}) {
+  return _log(LOG_LEVELS.DEBUG, message, metadata);
 }
 
 /**
- * Get all logs
+ * Get recent logs, optionally filtered by level
  */
-function getLogs() {
-  return [...logs];
+function _getLogs(level, limit = 100) {
+  let filteredLogs = logs;
+
+  if (level) {
+    filteredLogs = logs.filter(log => log.level === level);
+  }
+
+  return filteredLogs.slice(-limit);
 }
 
 /**
  * Get logs by level
  */
-function getLogsByLevel(level) {
+function _getLogsByLevel(level) {
   return logs.filter(log => log.level === level);
 }
 
 /**
  * Get logs within a time range
  */
-function getLogsByTimeRange(startTime, endTime) {
+function _getLogsByTimeRange(startTime, endTime) {
   return logs.filter(log => {
     const logTime = moment(log.timestamp, 'YYYY-MM-DD HH:mm:ss.SSS');
     return logTime.isBetween(startTime, endTime, null, '[]');
   });
 }
 
+// Wrap functions with OpenTelemetry tracing, using useParentSpan=true
+// to ensure logging operations don't create new spans but use existing ones
+const logError = telemetry.wrapWithSpan(
+  _logError,
+  'loggingService.logError',
+  { 'log.type': 'error' },
+  true
+);
+
+const logWarning = telemetry.wrapWithSpan(
+  _logWarning,
+  'loggingService.logWarning',
+  { 'log.type': 'warning' },
+  true
+);
+
+const logInfo = telemetry.wrapWithSpan(
+  _logInfo,
+  'loggingService.logInfo',
+  { 'log.type': 'info' },
+  true
+);
+
+const logDebug = telemetry.wrapWithSpan(
+  _logDebug,
+  'loggingService.logDebug',
+  { 'log.type': 'debug' },
+  true
+);
+
+const getLogs = telemetry.wrapWithSpan(_getLogs, 'loggingService.getLogs', {
+  'log.operation': 'getLogs',
+});
+
+const getLogsByLevel = telemetry.wrapWithSpan(_getLogsByLevel, 'loggingService.getLogsByLevel', {
+  'log.operation': 'getLogsByLevel',
+});
+
+const getLogsByTimeRange = telemetry.wrapWithSpan(
+  _getLogsByTimeRange,
+  'loggingService.getLogsByTimeRange',
+  {
+    'log.operation': 'getLogsByTimeRange',
+  }
+);
+
 module.exports = {
-  logInfo,
-  logWarning,
   logError,
+  logWarning,
+  logInfo,
   logDebug,
   getLogs,
   getLogsByLevel,
