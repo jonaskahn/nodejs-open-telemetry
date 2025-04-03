@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const telemetry = require('../src/middleware/telemetry');
 const notificationService = require('../src/services/notificationService');
 const loggingService = require('../src/services/loggingService');
+const { generateExecutionId } = require('../src/utils/idGenerator');
 
 // Wait a bit to make sure everything is initialized
 setTimeout(async () => {
@@ -10,17 +11,20 @@ setTimeout(async () => {
     loggingService.logInfo('Testing notification service with 5 nested calls');
 
     // Generate a unique test execution ID
-    const testExecutionId = uuidv4();
+    const testExecutionId = generateExecutionId('test-notify');
     console.log(`Test execution ID: ${testExecutionId}`);
 
     // Create a test-specific tracer
     console.log(`Creating dedicated tracer for test: notificationTest.${testExecutionId}`);
     const testTracer = telemetry.getTracer(`notificationTest.${testExecutionId}`);
 
-    // Start test with a parent span
-    testTracer.startActiveSpan('notification.test', async span => {
+    // Start a span for the test
+    testTracer.startActiveSpan('test.notification_chain', async span => {
+      span.setAttribute('test.execution_id', testExecutionId);
+      span.setAttribute('test.type', 'nested_calls');
+      span.setAttribute('test.component', 'notification_service');
+
       try {
-        span.setAttribute('test.execution_id', testExecutionId);
         span.setAttribute('test.start_time', new Date().toISOString());
 
         console.log('Sending test notification with 5 nested service calls...');

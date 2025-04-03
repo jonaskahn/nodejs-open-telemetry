@@ -4,16 +4,36 @@ const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http')
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
 const { trace, SpanStatusCode } = require('@opentelemetry/api');
+// Load environment variables
+require('dotenv').config();
 
 /**
  * Telemetry class for OpenTelemetry implementation
  */
 class Telemetry {
-  constructor(serviceName, serviceVersion) {
+  constructor(serviceName, serviceVersion, enabled = true) {
     this.serviceName = serviceName || 'service-cronjob-demo';
     this.serviceVersion = serviceVersion || '1.0.0';
+    this.enabled = enabled;
     this.sdk = null;
     this.initialized = false;
+  }
+
+  /**
+   * Enable or disable telemetry
+   * @param {boolean} enabled - Whether telemetry should be enabled
+   */
+  setEnabled(enabled) {
+    this.enabled = !!enabled;
+    return this;
+  }
+
+  /**
+   * Check if telemetry is currently enabled
+   * @returns {boolean} - Whether telemetry is enabled
+   */
+  isEnabled() {
+    return this.enabled;
   }
 
   /**
@@ -21,7 +41,7 @@ class Telemetry {
    * @returns {Promise<void>}
    */
   init() {
-    if (this.initialized) {
+    if (this.initialized || !this.enabled) {
       return Promise.resolve();
     }
 
@@ -35,7 +55,7 @@ class Telemetry {
 
       // Configure OTLP exporter to send traces to Jaeger
       const traceExporter = new OTLPTraceExporter({
-        url: 'http://localhost:4318/v1/traces',
+        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
       });
 
       // Create and start the OpenTelemetry SDK
@@ -91,6 +111,26 @@ class Telemetry {
    * @returns {Tracer} - OpenTelemetry tracer
    */
   getTracer(moduleName) {
+    if (!this.enabled) {
+      // Return a dummy tracer when disabled
+      return {
+        startActiveSpan: (name, options, callback) => {
+          if (typeof options === 'function') {
+            callback = options;
+          }
+          // Create a dummy span object
+          const dummySpan = {
+            setAttribute: () => dummySpan,
+            setAttributes: () => dummySpan,
+            addEvent: () => dummySpan,
+            setStatus: () => dummySpan,
+            recordException: () => dummySpan,
+            end: () => {},
+          };
+          return callback(dummySpan);
+        },
+      };
+    }
     return trace.getTracer(moduleName);
   }
 
@@ -103,6 +143,11 @@ class Telemetry {
    * @returns {Function} - Wrapped function
    */
   wrapWithSpan(fn, name, attributes = {}, useParentSpan = false) {
+    // If telemetry is disabled, just return the original function
+    if (!this.enabled) {
+      return (...args) => fn(...args);
+    }
+
     return (...args) => {
       const currentSpan = trace.getActiveSpan();
 
@@ -176,10 +221,47 @@ class Telemetry {
       }
     };
   }
+
+  /**
+   * Start a new active span
+   * @param {string} name - Span name
+   * @param {Object} options - Span options
+   * @param {Function} callback - Callback function
+   * @returns {*} - Result of the callback
+   */
+  startActiveSpan(name, options, callback) {
+    // If telemetry is disabled, just execute the callback with a dummy span
+    if (!this.enabled) {
+      if (typeof options === 'function') {
+        callback = options;
+        options = {};
+      }
+
+      // Create a dummy span
+      const dummySpan = {
+        setAttribute: () => dummySpan,
+        setAttributes: () => dummySpan,
+        addEvent: () => dummySpan,
+        setStatus: () => dummySpan,
+        recordException: () => dummySpan,
+        end: () => {},
+      };
+
+      return callback(dummySpan);
+    }
+
+    const tracer = this.getTracer(name.split('.')[0] || 'default');
+    return tracer.startActiveSpan(name, options, callback);
+  }
 }
 
-// Create singleton instance
-const telemetry = new Telemetry();
+// Parse enabled state from environment variable (default to true if not specified)
+const isEnabled = process.env.TELEMETRY_ENABLED !== 'false';
+const serviceName = process.env.SERVICE_NAME || 'service-cronjob-demo';
+const serviceVersion = process.env.SERVICE_VERSION || '1.0.0';
+
+// Create singleton instance with configuration from environment
+const telemetry = new Telemetry(serviceName, serviceVersion, isEnabled);
 
 // Initialize telemetry synchronously before export
 (async function () {

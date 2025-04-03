@@ -11,7 +11,7 @@ function _prepareNotificationContent(userId, message, channel) {
     const delay = Math.floor(Math.random() * (1500 - 1000 + 1)) + 1000;
 
     setTimeout(async () => {
-      loggingService.info(`Preparing notification content for user ${userId}`);
+      loggingService.logInfo(`Preparing notification content for user ${userId}`);
       const preferences = await _getUserNotificationPreferences(userId);
       const formattedMessage = preferences.useHtml ? `<div>${message}</div>` : message;
 
@@ -35,7 +35,7 @@ function _getUserNotificationPreferences(userId) {
     const delay = Math.floor(Math.random() * (1500 - 1000 + 1)) + 1000;
 
     setTimeout(async () => {
-      loggingService.info(`Retrieving notification preferences for user ${userId}`);
+      loggingService.logInfo(`Retrieving notification preferences for user ${userId}`);
       const deviceInfo = await _getUserDeviceInfo(userId);
 
       resolve({
@@ -55,7 +55,7 @@ function _getUserDeviceInfo(userId) {
     const delay = Math.floor(Math.random() * (1500 - 1000 + 1)) + 1000;
 
     setTimeout(async () => {
-      loggingService.info(`Retrieving device information for user ${userId}`);
+      loggingService.logInfo(`Retrieving device information for user ${userId}`);
       const tokensResult = await firebaseService.getUserDeviceTokens(userId);
 
       resolve({
@@ -72,20 +72,22 @@ function _getUserDeviceInfo(userId) {
 
 function _deliverNotification(userId, notification, channel) {
   return new Promise((resolve, reject) => {
-    loggingService.info(`Delivering notification via ${channel} to user ${userId}`);
+    loggingService.logInfo(`Delivering notification via ${channel} to user ${userId}`);
 
     firebaseService
-      .storeNotification(userId, notification.id)
+      .storeNotification(notification)
       .then(() => {
         if (channel === 'push') {
-          return firebaseService.sendPushNotification(userId, notification);
+          return firebaseService.sendPushNotification(userId, notification.message, {
+            notificationId: notification.id,
+          });
         }
         return Promise.resolve();
       })
       .then(() => firebaseService.trackNotificationStatus(notification.id, 'delivered'))
       .then(() => resolve(notification))
       .catch(error => {
-        loggingService.error(`Failed to deliver notification: ${error.message}`);
+        loggingService.logError(`Failed to deliver notification: ${error.message}`);
         reject(error);
       });
   });
@@ -107,7 +109,7 @@ async function _sendNotification(userId, message, channel = 'email') {
       status: 'processing',
     };
 
-    loggingService.info(
+    loggingService.logInfo(
       `Notification created for user ${userId} via ${channel}: ${notificationId}`
     );
 
@@ -120,11 +122,11 @@ async function _sendNotification(userId, message, channel = 'email') {
     notifications[notificationId].status = 'sent';
     notifications[notificationId].deliveredAt = deliveryResult.timestamp;
 
-    loggingService.info(`Notification sent to user ${userId} via ${channel}: ${notificationId}`);
+    loggingService.logInfo(`Notification sent to user ${userId} via ${channel}: ${notificationId}`);
 
     return notifications[notificationId];
   } catch (error) {
-    loggingService.error(`Failed to send notification: ${error.message}`);
+    loggingService.logError(`Failed to send notification: ${error.message}`);
     throw error;
   }
 }
@@ -137,7 +139,7 @@ async function _sendBulkNotifications(userIds, message, channel = 'email') {
       const result = await sendNotification(userId, message, channel);
       results.push(result);
     } catch (error) {
-      loggingService.error(`Failed to send notification to user ${userId}: ${error.message}`);
+      loggingService.logError(`Failed to send notification to user ${userId}: ${error.message}`);
       results.push({
         userId,
         error: error.message,
@@ -146,7 +148,7 @@ async function _sendBulkNotifications(userIds, message, channel = 'email') {
     }
   }
 
-  loggingService.info(`Bulk notifications sent to ${userIds.length} users`);
+  loggingService.logInfo(`Bulk notifications sent to ${userIds.length} users`);
   return results;
 }
 
@@ -164,13 +166,13 @@ function _scheduleNotification(userId, message, deliveryTime, channel = 'email')
     status: 'scheduled',
   };
 
-  loggingService.info(`Notification scheduled for user ${userId} at ${deliveryTime}`);
+  loggingService.logInfo(`Notification scheduled for user ${userId} at ${deliveryTime}`);
   return notifications[notificationId];
 }
 
 function _registerUserChannels(userId, channels) {
   userChannels[userId] = { ...(userChannels[userId] || {}), ...channels };
-  loggingService.info(`Updated notification channels for user ${userId}`);
+  loggingService.logInfo(`Updated notification channels for user ${userId}`);
   return userChannels[userId];
 }
 

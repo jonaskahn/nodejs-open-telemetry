@@ -5,10 +5,13 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",
+    "start:no-telemetry": "cross-env TELEMETRY_ENABLED=false node src/index.js",
+    "start:with-telemetry": "cross-env TELEMETRY_ENABLED=true node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:telemetry": "node tests/run-telemetry-test.js",
     "test:notification-chain": "node tests/test-notification-chain.js",
     "test:report-job": "node tests/test-report-job-init.js",
+    "test:config": "node test-telemetry-config.js",
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
     "format": "prettier --write \"**/*.{js,json,md}\""
@@ -25,11 +28,13 @@
     "@opentelemetry/sdk-node": "^0.200.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@opentelemetry/semantic-conventions": "^1.30.0",
+    "dotenv": "^16.4.7",
     "moment": "^2.30.1",
     "node-cron": "^3.0.3",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "eslint": "^9.23.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",

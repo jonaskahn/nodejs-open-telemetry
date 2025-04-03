@@ -62,7 +62,14 @@ npm install
 ### Running the Application
 
 ```bash
+# Run with telemetry enabled (default)
 npm start
+
+# Run with telemetry explicitly enabled
+npm run start:with-telemetry
+
+# Run with telemetry disabled
+npm run start:no-telemetry
 ```
 
 After running the application, you can see the OpenTelemetry traces in the Jaeger UI at http://localhost:16686.
@@ -83,6 +90,117 @@ This section provides guidelines for implementing tracing in your existing Node.
    - Use the `telemetry.js` middleware as a reference
    - Initialize the SDK with your service name and version
    - Configure the exporter to send traces to your backend (Jaeger, Zipkin, etc.)
+
+### Enabling or Disabling Telemetry
+
+OpenTelemetry can be dynamically enabled or disabled in your application. When disabled, the tracing functions still work but simply pass through without creating spans, ensuring your application code works without modification regardless of telemetry state.
+
+#### Using Environment Variables with dotenv
+
+The application uses `dotenv` to load configuration from `.env` files:
+
+```bash
+# Install dotenv if not already installed
+npm install dotenv
+```
+
+Create a `.env` file in your project root:
+
+```
+# OpenTelemetry Configuration
+TELEMETRY_ENABLED=true
+
+# Service Configuration
+SERVICE_NAME=my-service-name
+SERVICE_VERSION=1.0.0
+
+# OpenTelemetry Exporter Configuration
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+```
+
+To disable telemetry, you can:
+
+1. Set `TELEMETRY_ENABLED=false` in your `.env` file
+2. Use the environment variable when running the application:
+
+```bash
+# Linux/Mac
+TELEMETRY_ENABLED=false npm start
+
+# Windows
+set TELEMETRY_ENABLED=false && npm start
+```
+
+3. Use the provided convenience scripts:
+
+```bash
+# Using npm scripts
+npm run start:no-telemetry  # Telemetry disabled
+npm run start:with-telemetry  # Telemetry enabled
+
+# Or shell scripts
+./run-without-telemetry.sh  # Linux/Mac
+run-without-telemetry.cmd  # Windows
+```
+
+#### Testing Your Telemetry Configuration
+
+You can verify your telemetry configuration with the included test script:
+
+```bash
+npm run test:config
+```
+
+This will show:
+
+- Current telemetry settings from environment variables
+- Whether telemetry is enabled or disabled
+- Initialization status
+- Instructions for running with telemetry disabled
+
+#### Runtime API for Telemetry Control
+
+In addition to environment variables, you can control telemetry at runtime:
+
+```javascript
+// Disable telemetry globally
+telemetry.setEnabled(false);
+
+// Check if telemetry is enabled
+if (telemetry.isEnabled()) {
+  console.log('Telemetry is currently enabled');
+} else {
+  console.log('Telemetry is currently disabled');
+}
+```
+
+#### Creating a Telemetry Instance with Initial State
+
+```javascript
+// When creating a new telemetry instance:
+const serviceName = 'my-service';
+const serviceVersion = '1.0.0';
+const telemetryEnabled = process.env.TELEMETRY_ENABLED !== 'false';
+
+const myTelemetry = new Telemetry(serviceName, serviceVersion, telemetryEnabled);
+```
+
+#### Behavior When Disabled
+
+When telemetry is disabled:
+
+1. No spans will be created or sent to the backend
+2. All tracing methods (`wrapWithSpan`, `startActiveSpan`) continue to work but simply execute the wrapped function
+3. Dummy span objects are provided to callbacks to maintain API compatibility
+4. No performance overhead from tracing is incurred
+5. Your application code continues to work without modification
+
+This approach allows you to:
+
+- Disable telemetry in production environments if needed
+- Create environment-specific telemetry configurations
+- Toggle telemetry at runtime for debugging purposes
+- Implement feature flags for telemetry
 
 ### Converting Regular Methods to Traced Methods
 
@@ -338,125 +456,825 @@ in `notificationService.js`.
 
 ## Examples From This Project
 
+This section provides concrete before-and-after examples from the actual codebase, demonstrating how we've applied OpenTelemetry tracing to real-world scenarios.
+
 ### Example 1: Data Backup Job
 
-The data backup job demonstrates how to implement tracing in a scheduled job with multiple steps:
-
-#### Key Implementation Details:
+#### Before Adding Telemetry:
 
 ```javascript
-// Simplified version of the implementation in src/jobs/dataBackupJob.js
-
-// Top-level function that creates the parent span
+// Original version without telemetry
 function performBackup() {
-  const executionId = uuid.v4();
+  try {
+    // Generate a simple ID for logging
+    const backupId = generateSimpleId();
 
-  return telemetry.startActiveSpan(
-    'performBackup',
-    { attributes: { 'execution.id': executionId } },
+    loggingService.info(`Starting data backup: ${backupId}`);
+
+    // Create the backup directly
+    const backup = dataService.createDataBackup();
+
+    // Notify admins about the backup
+    notificationService.sendNotification('admin', `Data backup completed. Backup ID: ${backup.id}`);
+
+    loggingService.info(`Backup ${backupId} completed successfully`);
+    return backup;
+  } catch (error) {
+    loggingService.error(`Backup failed: ${error.message}`);
+
+    // Send error notification
+    notificationService.sendNotification('admin', `Data backup failed: ${error.message}`, 'email');
+
+    throw error;
+  }
+}
+
+// Schedule the job
+function initBackupJob() {
+  const schedule = '0 2 * * *'; // 2:00 AM daily
+
+  cron.schedule(schedule, () => {
+    performBackup();
+  });
+
+  loggingService.info(`Scheduled backup job: ${schedule}`);
+}
+```
+
+#### After Adding Telemetry:
+
+```javascript
+// ------------------------------
+// PUBLIC API (Entry Points)
+// ------------------------------
+
+/**
+ * Initialize and schedule the backup job
+ * This is the main entry point for setting up the job
+ */
+const initBackupJob = telemetry.wrapWithSpan(_initBackupJob, 'initBackupJob', {
+  'job.name': 'dataBackupJob',
+  'job.type': 'cron',
+});
+
+/**
+ * Perform a backup operation
+ * This can be called manually or by the scheduled job
+ */
+function performBackup(executionId) {
+  const execId = executionId || uuidv4();
+  return telemetry.wrapWithSpan(() => _performBackup(execId), `performBackup.${execId}`, {
+    'backup.type': 'scheduled',
+    'backup.job': 'dataBackupJob',
+    'backup.execution_id': execId,
+  })();
+}
+
+// ------------------------------
+// IMPLEMENTATION DETAILS
+// ------------------------------
+
+/**
+ * Private implementation of job initialization
+ */
+function _initBackupJob() {
+  if (!CONFIG.enabled) {
+    loggingService.info('Data backup job is disabled');
+    return false;
+  }
+
+  loggingService.info(`Scheduling data backup job with schedule: ${CONFIG.schedule}`);
+
+  const job = cron.schedule(CONFIG.schedule, () => {
+    const executionId = uuidv4();
+    const executionTracer = telemetry.getTracer(`dataBackupJob.${executionId}`);
+
+    executionTracer.startActiveSpan('backupJob.execution', span => {
+      try {
+        span.setAttribute('backup.scheduled_time', new Date().toISOString());
+        span.setAttribute('backup.cron_pattern', CONFIG.schedule);
+        span.setAttribute('backup.execution_id', executionId);
+
+        const result = performBackup(executionId);
+
+        span.setAttribute('backup.success', result.success);
+        if (result.backupId) {
+          span.setAttribute('backup.id', result.backupId);
+        }
+        if (result.duration) {
+          span.setAttribute('backup.duration_seconds', result.duration);
+        }
+
+        span.end();
+        return result;
+      } catch (error) {
+        span.recordException(error);
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        span.end();
+        throw error;
+      }
+    });
+  });
+
+  return job;
+}
+
+/**
+ * Private implementation of backup operation
+ */
+function _performBackup(executionId) {
+  try {
+    loggingService.info(`Starting scheduled data backup [execution: ${executionId}]...`);
+
+    const startTime = new Date();
+    const backup = dataService.createDataBackup();
+    const endTime = new Date();
+    const duration = (endTime - startTime) / 1000;
+
+    loggingService.info(
+      `Backup completed successfully in ${duration} seconds. Backup ID: ${backup.id}`
+    );
+
+    notificationService.sendNotification(
+      CONFIG.adminUser,
+      `Data backup completed successfully. Backup ID: ${backup.id}`
+    );
+
+    return {
+      success: true,
+      backupId: backup.id,
+      timestamp: backup.timestamp,
+      duration,
+      executionId,
+    };
+  } catch (error) {
+    loggingService.error(`Backup failed [execution: ${executionId}]: ${error.message}`, {
+      error,
+    });
+
+    notificationService.sendNotification(
+      CONFIG.adminUser,
+      `Data backup failed: ${error.message}`,
+      'email'
+    );
+
+    return {
+      success: false,
+      error: error.message,
+      timestamp: new Date(),
+      executionId,
+    };
+  }
+}
+```
+
+#### Key Improvements:
+
+1. **Execution Traceability**: Each backup operation now has a unique `executionId` that flows through the entire execution chain
+2. **Structured Data**: The return values include detailed metadata about the operation
+3. **Performance Metrics**: We now track and record the duration of each backup operation
+4. **Contextual Span Attributes**: Each span includes relevant attributes that make troubleshooting easier
+5. **Proper Error Handling**: Errors are properly captured and recorded in the telemetry system
+
+### Example 2: Notification Service
+
+The notification service demonstrates a complex flow with 5 levels of nested operations.
+
+#### Before Adding Telemetry:
+
+```javascript
+// Original notification sending process
+function sendNotification(userId, message, channel = 'email') {
+  try {
+    const notificationId = generateId();
+
+    // Step 1: Prepare content
+    loggingService.info(`Preparing content for notification to ${userId}`);
+    const preferences = getUserPreferences(userId);
+    const formattedMessage = formatMessage(message, preferences);
+
+    // Step 2: Create notification record
+    const notification = {
+      id: notificationId,
+      userId,
+      message: formattedMessage,
+      channel,
+      status: 'processing',
+      timestamp: new Date(),
+    };
+
+    // Step 3: Get user device information
+    const deviceInfo = getUserDeviceInfo(userId);
+
+    // Step 4: Deliver the notification
+    loggingService.info(`Delivering notification ${notificationId} via ${channel}`);
+
+    if (channel === 'push') {
+      sendPushNotification(userId, notification, deviceInfo);
+    } else if (channel === 'email') {
+      sendEmailNotification(userId, notification);
+    } else {
+      sendDefaultNotification(userId, notification);
+    }
+
+    // Step 5: Update status
+    notification.status = 'sent';
+    notification.deliveredAt = new Date();
+
+    loggingService.info(`Notification ${notificationId} sent successfully`);
+    return notification;
+  } catch (error) {
+    loggingService.error(`Failed to send notification: ${error.message}`);
+    throw error;
+  }
+}
+
+// Supporting functions
+function getUserPreferences(userId) {
+  // Implementation
+}
+
+function formatMessage(message, preferences) {
+  // Implementation
+}
+
+function getUserDeviceInfo(userId) {
+  // Implementation
+}
+
+function sendPushNotification(userId, notification, deviceInfo) {
+  // Implementation
+}
+```
+
+#### After Adding Telemetry:
+
+```javascript
+// ------------------------------
+// PUBLIC API (Entry Points)
+// ------------------------------
+
+/**
+ * Send a notification to a user
+ * This is the main entry point for notifications
+ */
+const sendNotification = telemetry.wrapWithSpan(
+  _sendNotification,
+  'notificationService.sendNotification',
+  { 'notification.operation': 'send' }
+);
+
+// ------------------------------
+// IMPLEMENTATION DETAILS (Top-down hierarchy)
+// ------------------------------
+
+/**
+ * Level 1 - Main notification function implementation
+ */
+function _sendNotification(userId, message, channel = 'email') {
+  try {
+    const notificationId = uuidv4();
+    const timestamp = new Date();
+    const content = await _prepareNotificationContent(userId, message, channel);
+
+    notifications[notificationId] = {
+      id: notificationId,
+      userId,
+      message: content.formattedMessage,
+      originalMessage: message,
+      channel,
+      timestamp,
+      status: 'processing',
+    };
+
+    loggingService.info(`Notification created for user ${userId} via ${channel}: ${notificationId}`);
+
+    const deliveryResult = await _deliverNotification(
+      userId,
+      notifications[notificationId],
+      channel
+    );
+
+    notifications[notificationId].status = 'sent';
+    notifications[notificationId].deliveredAt = deliveryResult.timestamp;
+
+    loggingService.info(`Notification sent to user ${userId} via ${channel}: ${notificationId}`);
+
+    return notifications[notificationId];
+  } catch (error) {
+    loggingService.error(`Failed to send notification: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Level 2 - Prepare notification content
+ */
+function _prepareNotificationContent(userId, message, channel) {
+  return new Promise(resolve => {
+    setTimeout(async () => {
+      loggingService.info(`Preparing notification content for user ${userId}`);
+      const preferences = await _getUserNotificationPreferences(userId);
+      const formattedMessage = preferences.useHtml ? `<div>${message}</div>` : message;
+
+      resolve({
+        userId,
+        originalMessage: message,
+        formattedMessage,
+        channel,
+        timestamp: new Date(),
+        templateId: preferences.templateId,
+        includeFooter: preferences.includeFooter,
+      });
+    }, simulatedDelay());
+  });
+}
+
+/**
+ * Level 2 - Deliver notification
+ */
+function _deliverNotification(userId, notification, channel) {
+  return new Promise((resolve, reject) => {
+    loggingService.info(`Delivering notification via ${channel} to user ${userId}`);
+
+    firebaseService.storeNotification(userId, notification.id)
+      .then(() => {
+        if (channel === 'push') {
+          return firebaseService.sendPushNotification(userId, notification);
+        }
+        return Promise.resolve();
+      })
+      .then(() => firebaseService.trackNotificationStatus(notification.id, 'delivered'))
+      .then(() => resolve(notification))
+      .catch(error => {
+        loggingService.error(`Failed to deliver notification: ${error.message}`);
+        reject(error);
+      });
+  });
+}
+
+/**
+ * Level 3 - Get user preferences
+ */
+function _getUserNotificationPreferences(userId) {
+  return new Promise(resolve => {
+    setTimeout(async () => {
+      loggingService.info(`Retrieving notification preferences for user ${userId}`);
+      const deviceInfo = await _getUserDeviceInfo(userId);
+
+      resolve({
+        userId,
+        templateId: `template-${Math.floor(Math.random() * 5) + 1}`,
+        useHtml: deviceInfo.supportHtml,
+        includeFooter: true,
+        deliveryPriority: 'high',
+        timestamp: new Date(),
+      });
+    }, simulatedDelay());
+  });
+}
+
+/**
+ * Level 4 - Get device info
+ */
+function _getUserDeviceInfo(userId) {
+  return new Promise(resolve => {
+    setTimeout(async () => {
+      loggingService.info(`Retrieving device information for user ${userId}`);
+      const tokensResult = await firebaseService.getUserDeviceTokens(userId);
+
+      resolve({
+        userId,
+        deviceType: tokensResult.platforms[0],
+        supportHtml: tokensResult.platforms.includes('ios'),
+        lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        tokens: tokensResult.tokens,
+        timestamp: new Date(),
+      });
+    }, simulatedDelay());
+  });
+}
+```
+
+#### Key Improvements:
+
+1. **Hierarchical Tracing**: Each level of the notification process is now visible as a separate span
+2. **Asynchronous Operations**: All operations are properly handled with Promises and async/await
+3. **Clearly Defined Steps**: Each step in the process is now a separate function with its own span
+4. **Better Visibility**: The process flow is much clearer and easier to understand
+5. **Error Boundaries**: Errors are properly captured at each level and bubble up appropriately
+6. **Detailed Logging**: Each step logs appropriate information for troubleshooting
+
+### Key Insights from the Examples
+
+When comparing the before and after versions, several important patterns emerge:
+
+1. **Function Decomposition**: The code is broken down into smaller, more focused functions
+2. **Explicit Dependencies**: Dependencies between functions are more clearly defined
+3. **Consistent Error Handling**: Error handling follows a consistent pattern
+4. **Traceability**: Each operation has a unique identifier for correlation
+5. **Performance Metrics**: Time-consuming operations are measured and recorded
+6. **Context Propagation**: The trace context flows through the entire call chain
+
+These examples demonstrate how to apply telemetry to existing code without completely rewriting it. The core business logic remains largely unchanged, but the observability is greatly enhanced.
+
+## Converting Traditional Code to Telemetry-Enabled Code: A Practical Guide
+
+This section provides a straightforward approach to adding OpenTelemetry to your existing codebase with minimal disruption.
+
+### Step 1: Identify Key Functions to Trace
+
+Start by identifying the most important functions in your application:
+
+- Entry points (API endpoints, event handlers)
+- Long-running operations
+- Functions that interact with external services
+- Error-prone areas of your code
+
+### Step 2: Create Private Implementation Functions
+
+For each function you want to trace:
+
+1. Rename the original function by adding an underscore prefix
+2. Keep the implementation intact initially
+
+```javascript
+// Original function
+function processOrder(order) {
+  // Implementation
+}
+
+// Step 1: Rename with underscore prefix
+function _processOrder(order) {
+  // Same implementation
+}
+```
+
+### Step 3: Create the Public Traced Function
+
+Create a new function with the original name that wraps the private implementation with tracing:
+
+```javascript
+// New public function with same name as original
+function processOrder(order) {
+  const executionId = uuidv4(); // Generate tracking ID
+
+  return telemetry.wrapWithSpan(
+    'processOrder',
+    {
+      'order.id': order.id,
+      'execution.id': executionId,
+    },
+    () => _processOrder(order)
+  );
+}
+```
+
+### Step 4: Add Hierarchical Tracing to Nested Functions
+
+If your function calls other functions:
+
+1. Extract those calls into separate private functions
+2. Add trace spans to each extracted function
+3. Maintain context propagation
+
+```javascript
+// Step 1: Original function with nested calls
+function _processOrder(order) {
+  // Validate order
+  if (!order.items || order.items.length === 0) {
+    throw new Error('Order must have items');
+  }
+
+  // Process payment
+  const paymentResult = processPayment(order.payment);
+
+  // Create shipment
+  const shipment = createShipment(order.items, order.address);
+
+  return { orderId: order.id, status: 'completed' };
+}
+
+// Step 2: Extract nested calls
+function _validateOrder(order) {
+  if (!order.items || order.items.length === 0) {
+    throw new Error('Order must have items');
+  }
+  return true;
+}
+
+function _processPayment(payment) {
+  // Implementation
+  return paymentResult;
+}
+
+function _createShipment(items, address) {
+  // Implementation
+  return shipment;
+}
+
+// Step 3: Update the main function to use extracted functions
+function _processOrder(order) {
+  _validateOrder(order);
+  const paymentResult = _processPayment(order.payment);
+  const shipment = _createShipment(order.items, order.address);
+  return { orderId: order.id, status: 'completed' };
+}
+
+// Step 4: Add tracing to each extracted function
+function _validateOrder(order) {
+  return telemetry.wrapWithSpan('_validateOrder', { 'order.id': order.id }, () => {
+    if (!order.items || order.items.length === 0) {
+      throw new Error('Order must have items');
+    }
+    return true;
+  });
+}
+
+// Similar for other extracted functions
+```
+
+### Step 5: Convert to Async/Promise Pattern
+
+Convert synchronous functions to use promises for better tracing:
+
+```javascript
+// Before: Synchronous
+function _processOrder(order) {
+  _validateOrder(order);
+  const paymentResult = _processPayment(order.payment);
+  const shipment = _createShipment(order.items, order.address);
+  return { orderId: order.id, status: 'completed' };
+}
+
+// After: Async/Promise
+async function _processOrder(order) {
+  await _validateOrder(order);
+  const paymentResult = await _processPayment(order.payment);
+  const shipment = await _createShipment(order.items, order.address);
+  return { orderId: order.id, status: 'completed' };
+}
+```
+
+### Step 6: Add Error Handling
+
+Add proper error handling to capture errors in spans:
+
+```javascript
+// Public function with error handling
+function processOrder(order) {
+  const executionId = uuidv4();
+
+  return telemetry.wrapWithSpan(
+    'processOrder',
+    { 'order.id': order.id, 'execution.id': executionId },
     async span => {
       try {
-        loggingService.info(`Starting scheduled data backup [execution: ${executionId}]...`);
-
-        // Call nested functions that create child spans
-        const backupId = await _createBackupData();
-        const users = await _notifyAdmins(backupId);
-
-        return { backupId, notifiedUsers: users };
+        const result = await _processOrder(order);
+        return result;
       } catch (error) {
         // Record error in the span
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: error.message,
         });
-        loggingService.error(`Backup failed: ${error.message}`);
+
+        // Record error details
+        span.recordException(error);
+
+        // Re-throw the error
+        throw error;
+      }
+    }
+  );
+}
+```
+
+### Step 7: Export Only Public Functions
+
+In your module exports, only include the traced public functions:
+
+```javascript
+module.exports = {
+  processOrder,
+  // Other public functions...
+};
+```
+
+### Practical Conversion Example
+
+Here's a complete example showing the transformation of a simple data service:
+
+#### Before: Traditional Code
+
+```javascript
+// dataService.js
+const db = require('./database');
+const loggingService = require('./loggingService');
+
+function getUser(userId) {
+  loggingService.info(`Getting user data for ID: ${userId}`);
+
+  try {
+    const userData = db.query('SELECT * FROM users WHERE id = ?', [userId]);
+
+    if (!userData) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    return {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      // Other user data
+    };
+  } catch (error) {
+    loggingService.error(`Failed to get user ${userId}: ${error.message}`);
+    throw error;
+  }
+}
+
+function updateUserProfile(userId, profileData) {
+  loggingService.info(`Updating profile for user: ${userId}`);
+
+  try {
+    validateProfileData(profileData);
+
+    db.execute('UPDATE users SET name = ?, email = ? WHERE id = ?', [
+      profileData.name,
+      profileData.email,
+      userId,
+    ]);
+
+    const updatedUser = getUser(userId);
+
+    loggingService.info(`Profile updated for user: ${userId}`);
+    return updatedUser;
+  } catch (error) {
+    loggingService.error(`Failed to update profile for user ${userId}: ${error.message}`);
+    throw error;
+  }
+}
+
+function validateProfileData(profileData) {
+  if (!profileData.name) {
+    throw new Error('Name is required');
+  }
+
+  if (!profileData.email || !profileData.email.includes('@')) {
+    throw new Error('Valid email is required');
+  }
+
+  return true;
+}
+
+module.exports = {
+  getUser,
+  updateUserProfile,
+};
+```
+
+#### After: Telemetry-Enabled Code
+
+```javascript
+// dataService.js
+const db = require('./database');
+const loggingService = require('./loggingService');
+const telemetry = require('../middleware/telemetry');
+const { SpanStatusCode } = require('@opentelemetry/api');
+const { v4: uuidv4 } = require('uuid');
+
+function _getUser(userId, requestId) {
+  loggingService.info(`Getting user data for ID: ${userId}`);
+
+  try {
+    const userData = db.query('SELECT * FROM users WHERE id = ?', [userId]);
+
+    if (!userData) {
+      throw new Error(`User not found: ${userId}`);
+    }
+
+    return {
+      id: userData.id,
+      name: userData.name,
+      email: userData.email,
+      // Other user data
+    };
+  } catch (error) {
+    loggingService.error(`Failed to get user ${userId}: ${error.message}`);
+    throw error;
+  }
+}
+
+function getUser(userId) {
+  const requestId = uuidv4();
+
+  return telemetry.wrapWithSpan(
+    'dataService.getUser',
+    { 'user.id': userId, 'request.id': requestId },
+    () => _getUser(userId, requestId)
+  );
+}
+
+async function _updateUserProfile(userId, profileData, requestId) {
+  loggingService.info(`Updating profile for user: ${userId}`);
+
+  try {
+    await _validateProfileData(profileData);
+
+    await db.execute('UPDATE users SET name = ?, email = ? WHERE id = ?', [
+      profileData.name,
+      profileData.email,
+      userId,
+    ]);
+
+    const updatedUser = await _getUser(userId, requestId);
+
+    loggingService.info(`Profile updated for user: ${userId}`);
+    return updatedUser;
+  } catch (error) {
+    loggingService.error(`Failed to update profile for user ${userId}: ${error.message}`);
+    throw error;
+  }
+}
+
+function updateUserProfile(userId, profileData) {
+  const requestId = uuidv4();
+
+  return telemetry.wrapWithSpan(
+    'dataService.updateUserProfile',
+    {
+      'user.id': userId,
+      'request.id': requestId,
+    },
+    async span => {
+      try {
+        return await _updateUserProfile(userId, profileData, requestId);
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error.message,
+        });
+        span.recordException(error);
         throw error;
       }
     }
   );
 }
 
-// Child function that creates its own span as part of the trace
-function _createBackupData() {
-  return telemetry.startActiveSpan('_createBackupData', {}, async () => {
-    // Implementation details
-    return backupId;
-  });
-}
+function _validateProfileData(profileData) {
+  return telemetry.wrapWithSpan(
+    'dataService._validateProfileData',
+    {
+      'validation.fields': Object.keys(profileData).join(','),
+    },
+    () => {
+      if (!profileData.name) {
+        throw new Error('Name is required');
+      }
 
-// Another child function with its own span
-function _notifyAdmins(backupId) {
-  return telemetry.startActiveSpan(
-    '_notifyAdmins',
-    { attributes: { 'backup.id': backupId } },
-    async () => {
-      // Implementation details
-      return notifiedUsers;
+      if (!profileData.email || !profileData.email.includes('@')) {
+        throw new Error('Valid email is required');
+      }
+
+      return true;
     }
   );
 }
+
+module.exports = {
+  getUser,
+  updateUserProfile,
+};
 ```
 
-### Example 2: Notification Service
+### Key Patterns for Convenient Conversion
 
-The notification service demonstrates how to implement deep nested spans (5 levels deep):
+1. **Follow the Wrapper Pattern**:
 
-```javascript
-// Simplified version from src/services/notificationService.js
+   - Keep original implementation in private functions
+   - Add public wrapper functions with telemetry
 
-// Level 1 - Entry point function
-function sendNotification(userId, message, options = {}) {
-  return telemetry.startActiveSpan(
-    'sendNotification',
-    { attributes: { userId, messageType: options.type || 'standard' } },
-    async () => {
-      // Level 2 - Prepare content
-      const content = await _prepareNotificationContent(userId, message, options);
+2. **Preserve Function Signatures**:
 
-      // Level 3 - Get user preferences
-      const prefs = await _getUserNotificationPreferences(userId);
+   - Public functions should maintain same arguments and return types as original
 
-      // Level 4 - Get device info
-      const deviceInfo = await _getUserDeviceInfo(userId, prefs.deviceId);
+3. **Use Request/Execution IDs**:
 
-      // Level 5 - Deliver notification
-      return _deliverNotification(
-        userId,
-        {
-          id: uuid.v4(),
-          message: content.formattedMessage,
-          // Other properties
-        },
-        prefs.preferredChannel
-      );
-    }
-  );
-}
+   - Generate unique IDs at entry points
+   - Pass them through to child functions for correlation
 
-// Each nested function also creates its own span
-function _prepareNotificationContent(userId, message, options) {
-  return telemetry.startActiveSpan(
-    '_prepareNotificationContent',
-    { attributes: { userId } },
-    async () => {
-      // Implementation
-      return { formattedMessage: formattedContent };
-    }
-  );
-}
+4. **Incremental Conversion**:
 
-// And so on for other nested functions...
-```
+   - Start with key operations first
+   - Gradually expand to more parts of the application
+   - Begin with leaf functions before tackling complex ones
 
-When viewed in Jaeger UI, this creates a beautiful hierarchical trace that shows:
+5. **Add Meaningful Attributes**:
+   - Include business-relevant attributes in spans
+   - Make attributes consistent across related operations
 
-1. The overall notification send operation
-2. The content preparation step
-3. User preference lookup
-4. Device information retrieval
-5. The actual notification delivery
-
-This structure makes it easy to see where time is spent and identify bottlenecks.
+By following this process, you can add comprehensive tracing to your application in a methodical way while minimizing disruption to your existing code structure.
 
 ## Visualizing and Analyzing Traces in Jaeger
 
@@ -524,270 +1342,3 @@ This visualization shows:
 3. **End-to-End Visibility**:
    - Follow a request across multiple services
    - Understand the complete flow of operations
-
-## Clean Code Principles
-
-This project follows clean code principles as recommended by Robert C. Martin (Uncle Bob). The following practices are implemented throughout the codebase:
-
-### Private Methods and Public APIs
-
-Private methods are prefixed with an underscore (\_) and only public methods are exposed via `module.exports`. This creates a clear distinction between the public API and internal implementation details.
-
-```javascript
-// Private implementation
-function _performBackup(executionId) {
-  // Implementation details
-}
-
-// Public API - wrapped with telemetry
-function performBackup(executionId) {
-  const execId = executionId || uuidv4();
-  return telemetry.wrapWithSpan(() => _performBackup(execId), `performBackup.${execId}`, {
-    'backup.type': 'scheduled',
-    'backup.job': 'dataBackupJob',
-    'backup.execution_id': execId,
-  })();
-}
-
-// Only expose public methods
-module.exports = {
-  initBackupJob,
-  performBackup,
-  CONFIG,
-};
-```
-
-### Self-Documenting Code
-
-The code is written to be self-explanatory without relying on comments. This is achieved through:
-
-1. **Descriptive Function Names**: Functions are named to clearly indicate what they do
-2. **Consistent Naming Conventions**: Similar operations use similar naming patterns
-3. **Single Responsibility**: Each function does one thing and does it well
-
-Example from the notification service:
-
-```javascript
-function _prepareNotificationContent(userId, message, channel) {
-  return new Promise(resolve => {
-    const delay = Math.floor(Math.random() * (1500 - 1000 + 1)) + 1000;
-
-    setTimeout(async () => {
-      loggingService.info(`Preparing notification content for user ${userId}`);
-      const preferences = await _getUserNotificationPreferences(userId);
-      const formattedMessage = preferences.useHtml ? `<div>${message}</div>` : message;
-
-      const content = {
-        userId,
-        originalMessage: message,
-        formattedMessage,
-        channel,
-        timestamp: new Date(),
-        templateId: preferences.templateId,
-        includeFooter: preferences.includeFooter,
-      };
-
-      resolve(content);
-    }, delay);
-  });
-}
-```
-
-### Telemetry Integration with Clean Code
-
-The codebase demonstrates how to integrate OpenTelemetry while maintaining clean code principles:
-
-1. **Separation of Concerns**: Core business logic is separated from telemetry instrumentation
-2. **Wrapper Functions**: Telemetry is added through wrapper functions that don't pollute the business logic
-3. **Meaningful Span Names**: Span names and attributes follow consistent naming conventions
-
-```javascript
-// Clean business logic in private function
-function _registerUserChannels(userId, channels) {
-  userChannels[userId] = { ...(userChannels[userId] || {}), ...channels };
-  loggingService.info(`Updated notification channels for user ${userId}`);
-  return userChannels[userId];
-}
-
-// Telemetry wrapper as public API
-const registerUserChannels = telemetry.wrapWithSpan(
-  _registerUserChannels,
-  'notificationService.registerUserChannels',
-  { 'notification.operation': 'registerChannels' }
-);
-```
-
-### Error Handling
-
-The code implements consistent error handling patterns:
-
-```javascript
-async function _sendNotification(userId, message, channel = 'email') {
-  try {
-    // Implementation...
-    return notifications[notificationId];
-  } catch (error) {
-    loggingService.error(`Failed to send notification: ${error.message}`);
-    throw error;
-  }
-}
-```
-
-### Function Structure
-
-Functions follow a consistent structure with initialization at the top, main processing in the middle, and return statements at the end:
-
-```javascript
-function _scheduleNotification(userId, message, deliveryTime, channel = 'email') {
-  const notificationId = uuidv4();
-  const timestamp = new Date();
-
-  notifications[notificationId] = {
-    id: notificationId,
-    userId,
-    message,
-    channel,
-    timestamp,
-    deliveryTime,
-    status: 'scheduled',
-  };
-
-  loggingService.info(`Notification scheduled for user ${userId} at ${deliveryTime}`);
-  return notifications[notificationId];
-}
-```
-
-By following these clean code principles, the codebase remains maintainable, readable, and self-documenting while still implementing advanced features like OpenTelemetry tracing.
-
-## Clean Code vs. Traditional Approach
-
-This project demonstrates the clean code approach advocated by Robert C. Martin, but it's useful to compare this with more traditional approaches to understand the benefits and trade-offs.
-
-### Traditional Approach (With Comments)
-
-```javascript
-/**
- * Send a notification to the specified user
- *
- * @param {string} userId - The ID of the user to send the notification to
- * @param {string} message - The notification message content
- * @param {string} [channel='email'] - The channel to send the notification through (email, sms, push)
- * @returns {Object} The notification object with status information
- * @throws {Error} If the notification fails to send
- */
-async function sendNotification(userId, message, channel = 'email') {
-  // Generate a unique ID for this notification
-  const notificationId = uuidv4();
-
-  // Record the current time
-  const timestamp = new Date();
-
-  // Format the message based on user preferences
-  const content = await prepareNotificationContent(userId, message, channel);
-
-  // Create the notification record
-  notifications[notificationId] = {
-    id: notificationId,
-    userId,
-    message: content.formattedMessage,
-    originalMessage: message,
-    channel,
-    timestamp,
-    status: 'processing',
-  };
-
-  // Log that we've created the notification
-  loggingService.logInfo(`Created notification ${notificationId} for user ${userId}`);
-
-  // Deliver the notification through the appropriate channel
-  const deliveryResult = await deliverNotification(userId, notifications[notificationId], channel);
-
-  // Update the notification status
-  notifications[notificationId].status = 'sent';
-  notifications[notificationId].deliveredAt = deliveryResult.timestamp;
-
-  return notifications[notificationId];
-}
-```
-
-### Clean Code Approach (Self-Documenting)
-
-```javascript
-function _sendNotification(userId, message, channel = 'email') {
-  try {
-    const notificationId = uuidv4();
-    const timestamp = new Date();
-    const content = await _prepareNotificationContent(userId, message, channel);
-
-    notifications[notificationId] = {
-      id: notificationId,
-      userId,
-      message: content.formattedMessage,
-      originalMessage: message,
-      channel,
-      timestamp,
-      status: 'processing',
-    };
-
-    loggingService.info(`Notification created for user ${userId} via ${channel}: ${notificationId}`);
-
-    const deliveryResult = await _deliverNotification(
-      userId,
-      notifications[notificationId],
-      channel
-    );
-
-    notifications[notificationId].status = 'sent';
-    notifications[notificationId].deliveredAt = deliveryResult.timestamp;
-
-    return notifications[notificationId];
-  } catch (error) {
-    loggingService.error(`Failed to send notification: ${error.message}`);
-    throw error;
-  }
-}
-
-const sendNotification = telemetry.wrapWithSpan(
-  _sendNotification,
-  'notificationService.sendNotification',
-  { 'notification.operation': 'send' }
-);
-```
-
-### Key Differences
-
-1. **Comments vs. Self-Documentation**
-
-   - Traditional: Uses JSDoc comments to explain parameters, return values, and function purpose
-   - Clean Code: Uses descriptive function and variable names, making the purpose clear without comments
-
-2. **Error Handling**
-
-   - Traditional: May not consistently handle errors
-   - Clean Code: Uses consistent try/catch blocks with proper logging
-
-3. **Function Size and Responsibility**
-
-   - Traditional: May have larger functions with multiple responsibilities
-   - Clean Code: Functions are smaller with single responsibilities, often delegated to helper functions
-
-4. **API Design**
-   - Traditional: May expose implementation details directly
-   - Clean Code: Separates private implementation (\_function) from public API (wrapper function)
-
-### When to Use Each Approach
-
-**Traditional Approach Works Well For:**
-
-- Public APIs where external developers need documentation
-- Complex algorithms where the "why" isn't obvious from the code
-- Teams with varying experience levels who benefit from explicit guidance
-
-**Clean Code Approach Works Well For:**
-
-- Internal application code maintained by a consistent team
-- Code that changes frequently
-- Teams that value maintainability and readability
-- Systems where testing is a priority
-
-In this project, we've opted for the clean code approach to demonstrate how even complex systems with features like hierarchical tracing can be implemented in a readable, maintainable way without relying on comments.

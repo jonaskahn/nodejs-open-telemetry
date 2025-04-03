@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const telemetry = require('../src/middleware/telemetry');
 const reportGenerationJob = require('../src/jobs/reportGenerationJob');
 const loggingService = require('../src/services/loggingService');
+const { generateExecutionId } = require('../src/utils/idGenerator');
 
 // Wait a bit to make sure everything is initialized
 setTimeout(async () => {
@@ -10,17 +11,20 @@ setTimeout(async () => {
     loggingService.logInfo('Testing report job initialization with 5 levels of nested calls');
 
     // Generate a unique test execution ID
-    const testExecutionId = uuidv4();
+    const testExecutionId = generateExecutionId('test-report');
     console.log(`Test execution ID: ${testExecutionId}`);
 
     // Create a test-specific tracer
     console.log(`Creating dedicated tracer for test: reportJobTest.${testExecutionId}`);
     const testTracer = telemetry.getTracer(`reportJobTest.${testExecutionId}`);
 
-    // Start test with a parent span
-    testTracer.startActiveSpan('reportJob.init.test', async span => {
+    // Start a span for the test
+    testTracer.startActiveSpan('test.report_job_initialization', async span => {
+      span.setAttribute('test.execution_id', testExecutionId);
+      span.setAttribute('test.type', 'nested_calls');
+      span.setAttribute('test.component', 'report_job');
+
       try {
-        span.setAttribute('test.execution_id', testExecutionId);
         span.setAttribute('test.start_time', new Date().toISOString());
 
         console.log('Initializing report job with 5 levels of nested calls...');

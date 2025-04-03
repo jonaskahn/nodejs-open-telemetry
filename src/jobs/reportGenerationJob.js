@@ -7,6 +7,7 @@ const loggingService = require('../services/loggingService');
 const notificationService = require('../services/notificationService');
 const telemetry = require('../middleware/telemetry');
 const { SpanStatusCode } = require('@opentelemetry/api');
+const { generateExecutionId } = require('../utils/idGenerator');
 
 // Base tracer only used for initialization
 const baseTracer = telemetry.getTracer('reportGenerationJob');
@@ -255,7 +256,7 @@ function _generateUsageReport(executionId) {
 // Wrap the original function with OpenTelemetry tracing
 // Note: The tracer will be created in the wrapped function for each execution
 const generateUsageReport = executionId => {
-  const execId = executionId || uuidv4();
+  const execId = executionId || generateExecutionId('report');
   return telemetry.wrapWithSpan(
     () => _generateUsageReport(execId),
     `generateUsageReport.${execId}`,
@@ -292,7 +293,7 @@ async function _initReportJob() {
     // Schedule the cron job
     const job = cron.schedule(CONFIG.schedule, () => {
       // Generate a unique ID for this execution
-      const executionId = uuidv4();
+      const executionId = generateExecutionId('report');
 
       // Get a dedicated tracer for this job execution
       const executionTracer = telemetry.getTracer(`reportGenerationJob.${executionId}`);

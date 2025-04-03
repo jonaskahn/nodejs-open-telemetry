@@ -1,4 +1,5 @@
 // Telemetry is automatically initialized when imported
+const telemetry = require('./middleware/telemetry');
 const loggingService = require('./services/loggingService');
 const userService = require('./services/userService');
 const dataService = require('./services/dataService');
@@ -6,6 +7,12 @@ const notificationService = require('./services/notificationService');
 const authService = require('./services/authService');
 const dataBackupJob = require('./jobs/dataBackupJob');
 const reportGenerationJob = require('./jobs/reportGenerationJob');
+
+// Log telemetry status from environment configuration
+loggingService.logInfo(
+  `OpenTelemetry tracing is ${telemetry.isEnabled() ? 'enabled' : 'disabled'}`
+);
+loggingService.logInfo(`Service name: ${process.env.SERVICE_NAME || 'service-cronjob-demo'}`);
 
 /**
  * Initialize the application

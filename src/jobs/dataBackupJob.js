@@ -5,6 +5,7 @@ const loggingService = require('../services/loggingService');
 const notificationService = require('../services/notificationService');
 const telemetry = require('../middleware/telemetry');
 const { SpanStatusCode } = require('@opentelemetry/api');
+const { generateExecutionId } = require('../utils/idGenerator');
 
 const baseTracer = telemetry.getTracer('dataBackupJob');
 
@@ -62,7 +63,7 @@ function _performBackup(executionId) {
 }
 
 function performBackup(executionId) {
-  const execId = executionId || uuidv4();
+  const execId = executionId || generateExecutionId('backup');
   return telemetry.wrapWithSpan(() => _performBackup(execId), `performBackup.${execId}`, {
     'backup.type': 'scheduled',
     'backup.job': 'dataBackupJob',
@@ -78,8 +79,8 @@ function _initBackupJob() {
 
   loggingService.logInfo(`Scheduling data backup job with schedule: ${CONFIG.schedule}`);
 
-  return cron.schedule(CONFIG.schedule, () => {
-    const executionId = uuidv4();
+  const job = cron.schedule(CONFIG.schedule, () => {
+    const executionId = generateExecutionId('backup');
     const executionTracer = telemetry.getTracer(`dataBackupJob.${executionId}`);
 
     executionTracer.startActiveSpan('backupJob.execution', span => {
@@ -108,6 +109,8 @@ function _initBackupJob() {
       }
     });
   });
+
+  return job;
 }
 
 const initBackupJob = telemetry.wrapWithSpan(_initBackupJob, 'initBackupJob', {
