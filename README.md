@@ -4,6 +4,7 @@
 
 This project demonstrates how to implement OpenTelemetry tracing in a real-world NodeJS application with multiple services and scheduled jobs.
 
+![Demo](./img/img.png)
 ## Quick Start
 
 ```bash
