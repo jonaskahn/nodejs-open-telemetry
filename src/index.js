@@ -1,3 +1,4 @@
+// Telemetry is automatically initialized when imported
 const loggingService = require('./services/loggingService');
 const userService = require('./services/userService');
 const dataService = require('./services/dataService');

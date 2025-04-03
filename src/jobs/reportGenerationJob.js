@@ -10,10 +10,7 @@ const notificationService = require('../services/notificationService');
  * Job configuration
  */
 const CONFIG = {
-  // Run every Monday at 8:00 AM
-  schedule: '0 8 * * 1',
-  // For testing purposes, you can use this instead:
-  // schedule: '*/10 * * * * *', // Run every 10 seconds
+  schedule: '*/5 * * * * *',
   enabled: true,
   adminUser: 'admin',
 };
@@ -39,7 +36,7 @@ function generateUsageReport() {
       data: {
         userCount: users.length,
         activeUsers: users.filter(
-          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days'))
+          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days')),
         ).length,
         dataSummary: {},
       },
@@ -63,13 +60,13 @@ function generateUsageReport() {
     const duration = (endTime - startTime) / 1000;
 
     loggingService.logInfo(
-      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`
+      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`,
     );
 
     // Notify admin about report
     notificationService.sendNotification(
       CONFIG.adminUser,
-      `Weekly usage report generated. Report ID: ${report.id}`
+      `Weekly usage report generated. Report ID: ${report.id}`,
     );
 
     return {
@@ -88,7 +85,7 @@ function generateUsageReport() {
     notificationService.sendNotification(
       CONFIG.adminUser,
       `Report generation failed: ${error.message}`,
-      'email'
+      'email',
     );
 
     return {
