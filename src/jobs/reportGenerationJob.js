@@ -351,24 +351,6 @@ const setupCronSchedule = telemetry.wrapWithSpan(
   { 'job.operation': 'setupSchedule' }
 );
 
-const registerJobHandlers = telemetry.wrapWithSpan(
-  _registerJobHandlers,
-  'reportGenerationJob.registerJobHandlers',
-  { 'job.operation': 'registerHandlers' }
-);
-
-const setupNotificationChannels = telemetry.wrapWithSpan(
-  _setupNotificationChannels,
-  'reportGenerationJob.setupNotificationChannels',
-  { 'job.operation': 'setupNotifications' }
-);
-
-const setupPersistenceLayer = telemetry.wrapWithSpan(
-  _setupPersistenceLayer,
-  'reportGenerationJob.setupPersistenceLayer',
-  { 'job.operation': 'setupPersistence' }
-);
-
 // Wrap the initialization function with OpenTelemetry tracing
 const initReportJob = telemetry.wrapWithSpan(_initReportJob, 'initReportJob', {
   'job.name': 'reportGenerationJob',

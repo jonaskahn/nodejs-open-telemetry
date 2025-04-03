@@ -91,6 +91,9 @@ class Telemetry {
    * @private
    */
   _registerShutdown() {
+    if (!this.enabled) {
+      return;
+    }
     process.on('SIGTERM', () => {
       if (this.sdk) {
         try {
@@ -234,7 +237,6 @@ class Telemetry {
     if (!this.enabled) {
       if (typeof options === 'function') {
         callback = options;
-        options = {};
       }
 
       // Create a dummy span

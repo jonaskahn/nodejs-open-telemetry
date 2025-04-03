@@ -55,7 +55,5 @@ function getAllUsers() {
 
 module.exports = {
   createUser,
-  getUserById,
-  updateUser,
   getAllUsers,
 };

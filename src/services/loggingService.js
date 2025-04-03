@@ -4,7 +4,6 @@ const moment = require('moment');
 
 // In-memory log storage for demo purposes
 const logs = [];
-const MAX_LOGS = 1000;
 
 /**
  * Log levels

@@ -79,7 +79,7 @@ function _initBackupJob() {
 
   loggingService.logInfo(`Scheduling data backup job with schedule: ${CONFIG.schedule}`);
 
-  const job = cron.schedule(CONFIG.schedule, () => {
+  return cron.schedule(CONFIG.schedule, () => {
     const executionId = generateExecutionId('backup');
     const executionTracer = telemetry.getTracer(`dataBackupJob.${executionId}`);
 
@@ -109,8 +109,6 @@ function _initBackupJob() {
       }
     });
   });
-
-  return job;
 }
 
 const initBackupJob = telemetry.wrapWithSpan(_initBackupJob, 'initBackupJob', {

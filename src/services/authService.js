@@ -100,9 +100,6 @@ function logout(sessionId) {
 
 module.exports = {
   authenticate,
-  verifySession,
   grantPermission,
-  hasPermission,
   verifyAccess,
-  logout,
 };
