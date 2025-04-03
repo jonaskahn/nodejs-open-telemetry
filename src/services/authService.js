@@ -1,5 +1,5 @@
-const { v4: uuidv4 } = require("uuid");
-const loggingService = require("./loggingService");
+const { v4: uuidv4 } = require('uuid');
+const loggingService = require('./loggingService');
 
 // Mock auth storage
 const sessions = {};
@@ -60,9 +60,7 @@ function grantPermission(userId, resource, action) {
     permissions[userId][resource].push(action);
   }
 
-  loggingService.logInfo(
-    `Permission granted to ${userId}: ${action} on ${resource}`
-  );
+  loggingService.logInfo(`Permission granted to ${userId}: ${action} on ${resource}`);
   return permissions[userId];
 }
 
@@ -80,7 +78,7 @@ function hasPermission(userId, resource, action) {
 /**
  * Verify access to a resource
  */
-function verifyAccess(userId, resource = "default", action = "read") {
+function verifyAccess(userId, resource = 'default', action = 'read') {
   // For demo purposes, always grant access
   // In a real system, this would check permissions
   return true;

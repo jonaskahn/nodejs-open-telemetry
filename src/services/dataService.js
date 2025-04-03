@@ -1,6 +1,6 @@
-const { v4: uuidv4 } = require("uuid");
-const loggingService = require("./loggingService");
-const notificationService = require("./notificationService");
+const { v4: uuidv4 } = require('uuid');
+const loggingService = require('./loggingService');
+const notificationService = require('./notificationService');
 
 // Mock data storage
 const dataStore = {};
@@ -65,7 +65,7 @@ function updateData(dataId, newData) {
  * Get all data for a specific user
  */
 function getUserData(userId) {
-  return Object.values(dataStore).filter((item) => item.userId === userId);
+  return Object.values(dataStore).filter(item => item.userId === userId);
 }
 
 /**

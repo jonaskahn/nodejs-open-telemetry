@@ -1,4 +1,4 @@
-const moment = require("moment");
+const moment = require('moment');
 
 // In-memory log storage for demo purposes
 const logs = [];
@@ -8,17 +8,17 @@ const MAX_LOGS = 1000;
  * Log levels
  */
 const LOG_LEVELS = {
-  INFO: "INFO",
-  WARNING: "WARNING",
-  ERROR: "ERROR",
-  DEBUG: "DEBUG",
+  INFO: 'INFO',
+  WARNING: 'WARNING',
+  ERROR: 'ERROR',
+  DEBUG: 'DEBUG',
 };
 
 /**
  * Core logging function
  */
 function log(level, message, metadata = {}) {
-  const timestamp = moment().format("YYYY-MM-DD HH:mm:ss.SSS");
+  const timestamp = moment().format('YYYY-MM-DD HH:mm:ss.SSS');
   const logEntry = {
     timestamp,
     level,
@@ -79,16 +79,16 @@ function getLogs() {
  * Get logs by level
  */
 function getLogsByLevel(level) {
-  return logs.filter((log) => log.level === level);
+  return logs.filter(log => log.level === level);
 }
 
 /**
  * Get logs within a time range
  */
 function getLogsByTimeRange(startTime, endTime) {
-  return logs.filter((log) => {
-    const logTime = moment(log.timestamp, "YYYY-MM-DD HH:mm:ss.SSS");
-    return logTime.isBetween(startTime, endTime, null, "[]");
+  return logs.filter(log => {
+    const logTime = moment(log.timestamp, 'YYYY-MM-DD HH:mm:ss.SSS');
+    return logTime.isBetween(startTime, endTime, null, '[]');
   });
 }
 

@@ -1,21 +1,21 @@
-const cron = require("node-cron");
-const moment = require("moment");
-const { v4: uuidv4 } = require("uuid");
-const userService = require("../services/userService");
-const dataService = require("../services/dataService");
-const loggingService = require("../services/loggingService");
-const notificationService = require("../services/notificationService");
+const cron = require('node-cron');
+const moment = require('moment');
+const { v4: uuidv4 } = require('uuid');
+const userService = require('../services/userService');
+const dataService = require('../services/dataService');
+const loggingService = require('../services/loggingService');
+const notificationService = require('../services/notificationService');
 
 /**
  * Job configuration
  */
 const CONFIG = {
   // Run every Monday at 8:00 AM
-  schedule: "0 8 * * 1",
+  schedule: '0 8 * * 1',
   // For testing purposes, you can use this instead:
   // schedule: '*/10 * * * * *', // Run every 10 seconds
   enabled: true,
-  adminUser: "admin",
+  adminUser: 'admin',
 };
 
 /**
@@ -23,7 +23,7 @@ const CONFIG = {
  */
 function generateUsageReport() {
   try {
-    loggingService.logInfo("Starting scheduled report generation...");
+    loggingService.logInfo('Starting scheduled report generation...');
 
     const startTime = new Date();
     const reportId = uuidv4();
@@ -35,20 +35,18 @@ function generateUsageReport() {
     const report = {
       id: reportId,
       generatedAt: startTime,
-      type: "weekly_usage",
+      type: 'weekly_usage',
       data: {
         userCount: users.length,
         activeUsers: users.filter(
-          (user) =>
-            user.lastLoginAt &&
-            moment(user.lastLoginAt).isAfter(moment().subtract(7, "days"))
+          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days'))
         ).length,
         dataSummary: {},
       },
     };
 
     // Process user data for the report
-    users.forEach((user) => {
+    users.forEach(user => {
       const userData = dataService.getUserData(user.id);
       if (userData && userData.length) {
         // Add user data metrics to report
@@ -90,7 +88,7 @@ function generateUsageReport() {
     notificationService.sendNotification(
       CONFIG.adminUser,
       `Report generation failed: ${error.message}`,
-      "email"
+      'email'
     );
 
     return {
@@ -106,13 +104,11 @@ function generateUsageReport() {
  */
 function initReportJob() {
   if (!CONFIG.enabled) {
-    loggingService.logInfo("Report generation job is disabled");
+    loggingService.logInfo('Report generation job is disabled');
     return false;
   }
 
-  loggingService.logInfo(
-    `Scheduling report generation job with schedule: ${CONFIG.schedule}`
-  );
+  loggingService.logInfo(`Scheduling report generation job with schedule: ${CONFIG.schedule}`);
 
   // Schedule the cron job
   const job = cron.schedule(CONFIG.schedule, () => {

@@ -1,5 +1,5 @@
-const { v4: uuidv4 } = require("uuid");
-const loggingService = require("./loggingService");
+const { v4: uuidv4 } = require('uuid');
+const loggingService = require('./loggingService');
 
 // Mock notification storage
 const notifications = {};
@@ -9,7 +9,7 @@ const userChannels = {};
 /**
  * Send notification to a specific user
  */
-function sendNotification(userId, message, channel = "email") {
+function sendNotification(userId, message, channel = 'email') {
   const notificationId = uuidv4();
   const timestamp = new Date();
 
@@ -20,12 +20,10 @@ function sendNotification(userId, message, channel = "email") {
     message,
     channel,
     timestamp,
-    status: "sent",
+    status: 'sent',
   };
 
-  loggingService.logInfo(
-    `Notification sent to user ${userId} via ${channel}: ${notificationId}`
-  );
+  loggingService.logInfo(`Notification sent to user ${userId} via ${channel}: ${notificationId}`);
 
   // In a real system, this would send the actual notification
   // For demo purposes, just returning the notification object
@@ -35,10 +33,8 @@ function sendNotification(userId, message, channel = "email") {
 /**
  * Send bulk notifications to multiple users
  */
-function sendBulkNotifications(userIds, message, channel = "email") {
-  const results = userIds.map((userId) =>
-    sendNotification(userId, message, channel)
-  );
+function sendBulkNotifications(userIds, message, channel = 'email') {
+  const results = userIds.map(userId => sendNotification(userId, message, channel));
 
   loggingService.logInfo(`Bulk notifications sent to ${userIds.length} users`);
   return results;
@@ -47,12 +43,7 @@ function sendBulkNotifications(userIds, message, channel = "email") {
 /**
  * Schedule a notification for future delivery
  */
-function scheduleNotification(
-  userId,
-  message,
-  deliveryTime,
-  channel = "email"
-) {
+function scheduleNotification(userId, message, deliveryTime, channel = 'email') {
   const notificationId = uuidv4();
   const timestamp = new Date();
 
@@ -64,12 +55,10 @@ function scheduleNotification(
     channel,
     timestamp,
     deliveryTime,
-    status: "scheduled",
+    status: 'scheduled',
   };
 
-  loggingService.logInfo(
-    `Notification scheduled for user ${userId} at ${deliveryTime}`
-  );
+  loggingService.logInfo(`Notification scheduled for user ${userId} at ${deliveryTime}`);
 
   // In a real system, this would set up the scheduled delivery
   return notifications[notificationId];
@@ -89,7 +78,7 @@ function registerUserChannels(userId, channels) {
  * Get notifications for a specific user
  */
 function getUserNotifications(userId) {
-  return Object.values(notifications).filter((n) => n.userId === userId);
+  return Object.values(notifications).filter(n => n.userId === userId);
 }
 
 module.exports = {

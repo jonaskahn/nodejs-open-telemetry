@@ -1,6 +1,6 @@
-const { v4: uuidv4 } = require("uuid");
-const authService = require("./authService");
-const loggingService = require("./loggingService");
+const { v4: uuidv4 } = require('uuid');
+const authService = require('./authService');
+const loggingService = require('./loggingService');
 
 // Mock users database
 const users = {};
