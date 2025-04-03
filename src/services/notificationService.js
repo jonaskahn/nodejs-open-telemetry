@@ -98,48 +98,30 @@ function _getUserDeviceInfo(userId) {
  * Deliver notification to external providers
  * Level 5 of nested calls - called from sendNotification
  */
-function _deliverNotification(notification) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      loggingService.logInfo(
-        `Delivering notification via ${notification.channel} to user ${notification.userId}`
-      );
+function _deliverNotification(userId, notification, channel) {
+  return new Promise((resolve, reject) => {
+    loggingService.info(`Delivering notification via ${channel} to user ${userId}`);
 
-      const notificationId = notification.id;
-
-      // Initialize Firebase connection
-      await firebaseService.initializeFirebase();
-
-      // Store notification in Firebase
-      await firebaseService.storeNotification({
-        userId: notification.userId,
-        message: notification.formattedMessage,
-        channel: notification.channel,
-        sentAt: notification.timestamp,
+    // Store in Firebase and send push notification if it's a mobile notification
+    firebaseService
+      .storeNotification(userId, notification.id)
+      .then(() => {
+        if (channel === 'push') {
+          return firebaseService.sendPushNotification(userId, notification);
+        }
+        return Promise.resolve();
+      })
+      .then(() => {
+        // Track the notification status
+        return firebaseService.trackNotificationStatus(notification.id, 'delivered');
+      })
+      .then(() => {
+        resolve(notification);
+      })
+      .catch(error => {
+        loggingService.error(`Failed to deliver notification: ${error.message}`);
+        reject(error);
       });
-
-      // Send push notification if applicable
-      if (notification.channel === 'push' || notification.channel === 'all') {
-        await firebaseService.sendPushNotification(
-          notification.userId,
-          notification.formattedMessage,
-          { priority: 'high' }
-        );
-      }
-
-      // Track delivery status
-      await firebaseService.trackNotificationStatus(notificationId, 'delivered');
-
-      resolve({
-        success: true,
-        notificationId,
-        channel: notification.channel,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      loggingService.logError(`Failed to deliver notification: ${error.message}`);
-      reject(error);
-    }
   });
 }
 
@@ -170,10 +152,11 @@ async function _sendNotification(userId, message, channel = 'email') {
     );
 
     // Level 5 - Deliver notification to external providers
-    const deliveryResult = await _deliverNotification({
-      ...notifications[notificationId],
-      formattedMessage: content.formattedMessage,
-    });
+    const deliveryResult = await _deliverNotification(
+      userId,
+      notifications[notificationId],
+      channel
+    );
 
     // Update notification status
     notifications[notificationId].status = 'sent';

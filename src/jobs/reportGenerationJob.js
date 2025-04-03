@@ -189,7 +189,7 @@ function _generateUsageReport(executionId) {
       data: {
         userCount: users.length,
         activeUsers: users.filter(
-          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days')),
+          user => user.lastLoginAt && moment(user.lastLoginAt).isAfter(moment().subtract(7, 'days'))
         ).length,
         dataSummary: {},
       },
@@ -213,13 +213,13 @@ function _generateUsageReport(executionId) {
     const duration = (endTime - startTime) / 1000;
 
     loggingService.logInfo(
-      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`,
+      `Report generation completed in ${duration} seconds. Report ID: ${report.id}`
     );
 
     // Notify admin about report
     notificationService.sendNotification(
       CONFIG.adminUser,
-      `Weekly usage report generated. Report ID: ${report.id}`,
+      `Weekly usage report generated. Report ID: ${report.id}`
     );
 
     return {
@@ -233,14 +233,14 @@ function _generateUsageReport(executionId) {
   } catch (error) {
     loggingService.logError(
       `Report generation failed [execution: ${executionId}]: ${error.message}`,
-      { error },
+      { error }
     );
 
     // Notify admin about failure
     notificationService.sendNotification(
       CONFIG.adminUser,
       `Report generation failed: ${error.message}`,
-      'email',
+      'email'
     );
 
     return {
@@ -263,7 +263,7 @@ const generateUsageReport = executionId => {
       'report.type': 'usage',
       'report.job': 'reportGenerationJob',
       'report.execution_id': execId,
-    },
+    }
   )();
 };
 
@@ -286,7 +286,7 @@ async function _initReportJob() {
     const cronSetup = await setupCronSchedule(CONFIG);
 
     loggingService.logInfo(
-      `Cron schedule setup completed with ${cronSetup.handlers.length} handlers`,
+      `Cron schedule setup completed with ${cronSetup.handlers.length} handlers`
     );
 
     // Schedule the cron job
@@ -305,7 +305,7 @@ async function _initReportJob() {
           span.setAttribute('report.execution_id', executionId);
           span.setAttribute(
             'report.notification_channels',
-            cronSetup.notificationChannels.join(','),
+            cronSetup.notificationChannels.join(',')
           );
 
           const result = generateUsageReport(executionId);
@@ -341,31 +341,31 @@ async function _initReportJob() {
 const validateJobConfig = telemetry.wrapWithSpan(
   _validateJobConfig,
   'reportGenerationJob.validateJobConfig',
-  { 'job.operation': 'validateConfig' },
+  { 'job.operation': 'validateConfig' }
 );
 
 const setupCronSchedule = telemetry.wrapWithSpan(
   _setupCronSchedule,
   'reportGenerationJob.setupCronSchedule',
-  { 'job.operation': 'setupSchedule' },
+  { 'job.operation': 'setupSchedule' }
 );
 
 const registerJobHandlers = telemetry.wrapWithSpan(
   _registerJobHandlers,
   'reportGenerationJob.registerJobHandlers',
-  { 'job.operation': 'registerHandlers' },
+  { 'job.operation': 'registerHandlers' }
 );
 
 const setupNotificationChannels = telemetry.wrapWithSpan(
   _setupNotificationChannels,
   'reportGenerationJob.setupNotificationChannels',
-  { 'job.operation': 'setupNotifications' },
+  { 'job.operation': 'setupNotifications' }
 );
 
 const setupPersistenceLayer = telemetry.wrapWithSpan(
   _setupPersistenceLayer,
   'reportGenerationJob.setupPersistenceLayer',
-  { 'job.operation': 'setupPersistence' },
+  { 'job.operation': 'setupPersistence' }
 );
 
 // Wrap the initialization function with OpenTelemetry tracing
